@@ -7,6 +7,7 @@ import { buildSanitizedAIContext } from './privacy';
 import { formatRocDate, getTemplateArchive, getTemplateObservation, getTemplateSyncStatus, pccTemplateIndex } from './pcc';
 import { templateRegistry } from './templates';
 import { exportTenderInstructionsDraft } from './template-writer';
+import { exportServiceContractDraft } from './service-contract-writer';
 import type { ProcurementCase, ProcurementCategory, SecurityLevel } from './types';
 
 function newCase(): ProcurementCase {
@@ -111,6 +112,19 @@ export default function App() {
       setTemplateWriteStatus(`工程會 ${report.templateVersion} 投標須知初稿已產生。${applied}${pending}${warnings}`);
     } catch (error) {
       setTemplateWriteStatus(error instanceof Error ? error.message : '投標須知初稿產製失敗');
+    }
+  }
+
+  async function exportServiceDraft() {
+    setTemplateWriteStatus('正在以工程會官方 ODT 產製勞務採購契約初稿…');
+    try {
+      const report = await exportServiceContractDraft(current);
+      const applied = report.applied.length ? `已帶入：${report.applied.join('、')}` : '尚無欄位自動帶入';
+      const pending = report.pending.length ? `；待人工確認：${report.pending.join('、')}` : '';
+      const warnings = report.warnings.length ? `；注意：${report.warnings.join(' ')}` : '';
+      setTemplateWriteStatus(`工程會 ${report.templateVersion} 勞務採購契約初稿已產生。${applied}${pending}${warnings}`);
+    } catch (error) {
+      setTemplateWriteStatus(error instanceof Error ? error.message : '勞務採購契約初稿產製失敗');
     }
   }
 
@@ -270,6 +284,9 @@ export default function App() {
             <button className="secondary" onClick={() => exportCaseJson(current)}>匯出 JSON 備份</button>
             <button className="secondary" onClick={() => void exportCaseDocx(current, rules)}>匯出 DOCX 檢核表</button>
             <button onClick={() => void exportTenderDraft()}>產出工程會投標須知 DOCX 初稿</button>
+            {current.category === 'service' && (
+              <button onClick={() => void exportServiceDraft()}>產出工程會勞務採購契約 ODT 初稿</button>
+            )}
             {templateWriteStatus && <p className="template-write-status">{templateWriteStatus}</p>}
           </div>
         </section>
