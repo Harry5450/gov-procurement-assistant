@@ -14,6 +14,12 @@ export interface ProcurementCase {
   acceptanceMethod: string;
   deliverables: string[];
   vendorQualification: string;
+  procurementMethod?: string;
+  awardPrinciple?: string;
+  awardMethod?: string;
+  bidBond?: string;
+  performanceBond?: string;
+  contractPriceMethod?: string;
   internalNotes: string;
   reservePrice?: number;
   securityLevel: SecurityLevel;

@@ -1,3 +1,4 @@
+import { validateCanonicalConsistency } from './mapping';
 import type { ProcurementCase, RuleResult } from './types';
 
 const COMMON_DOCUMENTS = [
@@ -34,8 +35,13 @@ export function evaluateCase(procurementCase: ProcurementCase): RuleResult {
   if (!procurementCase.acceptanceMethod.trim()) confirmations.push('驗收方式尚未確認');
   if (!procurementCase.paymentTerms.trim()) confirmations.push('付款條件尚未確認');
   if (!procurementCase.contractStart || !procurementCase.contractEnd) confirmations.push('履約期間尚未完整設定');
+  if (!procurementCase.procurementMethod?.trim()) confirmations.push('招標方式尚未確認');
+  if (!procurementCase.awardPrinciple?.trim()) confirmations.push('決標原則尚未確認');
+  if (!procurementCase.awardMethod?.trim()) confirmations.push('決標方式尚未確認');
+  if (!procurementCase.contractPriceMethod?.trim() && procurementCase.category !== 'unknown') confirmations.push('契約價金計算方式尚未確認');
   if (procurementCase.budget <= 0) warnings.push('預算金額未設定或不正確');
   if (procurementCase.reservePrice !== undefined) warnings.push('偵測到底價／預估底價欄位：此資料屬 RESTRICTED，不得送往外部 LLM。');
+  warnings.push(...validateCanonicalConsistency(procurementCase));
 
   return { requiredDocuments, optionalDocuments, confirmations, warnings };
 }
@@ -52,6 +58,10 @@ export function completenessScore(procurementCase: ProcurementCase): number {
     procurementCase.paymentTerms.trim().length > 0,
     procurementCase.acceptanceMethod.trim().length > 0,
     procurementCase.vendorQualification.trim().length > 0,
+    Boolean(procurementCase.procurementMethod?.trim()),
+    Boolean(procurementCase.awardPrinciple?.trim()),
+    Boolean(procurementCase.awardMethod?.trim()),
+    Boolean(procurementCase.contractPriceMethod?.trim()),
   ];
   return Math.round((checks.filter(Boolean).length / checks.length) * 100);
 }
