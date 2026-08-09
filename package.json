@@ -9,12 +9,14 @@
     "preview": "vite preview",
     "pcc:watch": "node scripts/pcc-watcher.mjs",
     "pcc:assets": "node scripts/pcc-assets.mjs",
-    "pcc:text": "node scripts/pcc-text.mjs"
+    "pcc:text": "node scripts/pcc-text.mjs",
+    "template:smoke": "node scripts/template-writer-smoke.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
     "dexie": "latest",
     "docx": "latest",
+    "fflate": "latest",
     "file-saver": "latest",
     "vite": "latest",
     "react": "latest",
