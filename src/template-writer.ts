@@ -53,8 +53,9 @@ function mutateFirstParagraph(
     if (changed) return paragraphXml;
     const text = paragraphText(paragraphXml);
     if (!matcher(text)) return paragraphXml;
-    changed = true;
-    return mutate(paragraphXml, text);
+    const next = mutate(paragraphXml, text);
+    if (next !== paragraphXml) changed = true;
+    return next;
   });
   return { xml, changed };
 }
@@ -90,6 +91,7 @@ function selectOption(documentXml: string, optionText: string) {
     (text) => text.includes(optionText),
     (paragraphXml) => {
       if (/[■☒]/.test(paragraphXml)) return paragraphXml;
+      if (!/[□☐]/.test(paragraphXml)) return paragraphXml;
       return paragraphXml.replace(/[□☐]/, '■');
     },
   );
@@ -133,7 +135,7 @@ function record(
   missingAnchorWarning = true,
 ) {
   if (result.changed) report.applied.push(label);
-  else if (missingAnchorWarning) report.warnings.push(`${label}：未在官方範本找到可安全寫入的 Anchor。`);
+  else if (missingAnchorWarning) report.warnings.push(`${label}：未在官方範本找到可安全寫入的 Anchor 或可勾選符號。`);
 }
 
 export async function exportTenderInstructionsDraft(procurementCase: ProcurementCase): Promise<TemplateWriteReport> {
