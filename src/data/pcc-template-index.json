@@ -1,0 +1,12 @@
+{
+  "sourceUrl": "https://www.pcc.gov.tw/content/index?eid=10146&lang=1&type=C",
+  "items": [
+    { "sequence": 1, "name": "投標須知範本", "officialDate": "1141231" },
+    { "sequence": 5, "name": "工程採購契約範本", "officialDate": "1141230" },
+    { "sequence": 8, "name": "財物採購契約範本", "officialDate": "1141230" },
+    { "sequence": 9, "name": "勞務採購契約範本", "officialDate": "1141231" },
+    { "sequence": 10, "name": "公共工程技術服務契約範本", "officialDate": "1150423" },
+    { "sequence": 12, "name": "資訊服務採購契約範本", "officialDate": "1131226" },
+    { "sequence": 58, "name": "採購契約範本附記條款特別聲明", "officialDate": "1150126" }
+  ]
+}
