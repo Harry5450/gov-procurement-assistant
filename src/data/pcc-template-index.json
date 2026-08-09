@@ -1,12 +1,359 @@
 {
   "sourceUrl": "https://www.pcc.gov.tw/content/index?eid=10146&lang=1&type=C",
   "items": [
-    { "sequence": 1, "name": "投標須知範本", "officialDate": "1141231" },
-    { "sequence": 5, "name": "工程採購契約範本", "officialDate": "1141230" },
-    { "sequence": 8, "name": "財物採購契約範本", "officialDate": "1141230" },
-    { "sequence": 9, "name": "勞務採購契約範本", "officialDate": "1141231" },
-    { "sequence": 10, "name": "公共工程技術服務契約範本", "officialDate": "1150423" },
-    { "sequence": 12, "name": "資訊服務採購契約範本", "officialDate": "1131226" },
-    { "sequence": 58, "name": "採購契約範本附記條款特別聲明", "officialDate": "1150126" }
+    {
+      "sequence": 1,
+      "name": "投標須知範本",
+      "officialDate": "1150727",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?type=C&eid=9808&lang=1"
+    },
+    {
+      "sequence": 2,
+      "name": "參考最有利標精神投標須知範本",
+      "officialDate": "1150727",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9809&type=C&lang=1"
+    },
+    {
+      "sequence": 3,
+      "name": "公開取得電子報價單投標須知範本（工程、財物採購）",
+      "officialDate": "1141231",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9810&type=C&lang=1"
+    },
+    {
+      "sequence": 4,
+      "name": "媒體服務採購投標須知範本",
+      "officialDate": "1141231",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9811&type=C&lang=1"
+    },
+    {
+      "sequence": 5,
+      "name": "工程採購契約範本",
+      "officialDate": "1141230",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9812&type=C&lang=1"
+    },
+    {
+      "sequence": 6,
+      "name": "統包工程採購契約範本",
+      "officialDate": "1141230",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9813&type=C&lang=1"
+    },
+    {
+      "sequence": 7,
+      "name": "節能績效保證專案統包工程採購契約範本",
+      "officialDate": "1141230",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9814&type=C&lang=1"
+    },
+    {
+      "sequence": 8,
+      "name": "財物採購契約範本",
+      "officialDate": "1141230",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9815&type=C&lang=1"
+    },
+    {
+      "sequence": 9,
+      "name": "勞務採購契約範本",
+      "officialDate": "1141231",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9816&type=C&lang=1"
+    },
+    {
+      "sequence": 10,
+      "name": "公共工程技術服務契約範本",
+      "officialDate": "1150423",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9817&type=C&lang=1"
+    },
+    {
+      "sequence": 11,
+      "name": "公共工程專案管理契約範本",
+      "officialDate": "1141230",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9818&type=C&lang=1"
+    },
+    {
+      "sequence": 12,
+      "name": "資訊服務採購契約範本",
+      "officialDate": "1131226",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9819&type=C&lang=1"
+    },
+    {
+      "sequence": 13,
+      "name": "災害搶險搶修開口契約範本",
+      "officialDate": "1141230",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9820&type=C&lang=1"
+    },
+    {
+      "sequence": 14,
+      "name": "災後復建工程設計、監造技術服務開口契約範本",
+      "officialDate": "1141230",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9821&type=C&lang=1"
+    },
+    {
+      "sequence": 15,
+      "name": "資訊雲端服務採購契約範本",
+      "officialDate": "1141230",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9866&type=C&lang=1"
+    },
+    {
+      "sequence": 16,
+      "name": "媒體服務採購契約範本",
+      "officialDate": "1141230",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9823&type=C&lang=1"
+    },
+    {
+      "sequence": 17,
+      "name": "社會福利服務採購契約範本",
+      "officialDate": "1141230",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9824&type=C&lang=1"
+    },
+    {
+      "sequence": 18,
+      "name": "招標投標及契約文件範本",
+      "officialDate": "1140604",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9825&type=C&lang=1"
+    },
+    {
+      "sequence": 19,
+      "name": "公開取得電子報價單招標投標及契約文件範本",
+      "officialDate": "1120501",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9826&type=C&lang=1"
+    },
+    {
+      "sequence": 20,
+      "name": "投標標價清單範本",
+      "officialDate": "1040722",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9827&type=C&lang=1"
+    },
+    {
+      "sequence": 21,
+      "name": "公開取得電子報價單投標標價清單範本( 財物採購)",
+      "officialDate": "1120501",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9828&type=C&lang=1"
+    },
+    {
+      "sequence": 22,
+      "name": "公開取得電子報價單投標標價清單範本( 工程採購)",
+      "officialDate": "1120501",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9829&type=C&lang=1"
+    },
+    {
+      "sequence": 23,
+      "name": "投標廠商聲明書",
+      "officialDate": "1140604",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9830&type=C&lang=1"
+    },
+    {
+      "sequence": 24,
+      "name": "公開取得電子報價單投標廠商聲明書",
+      "officialDate": "1131220",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9831&type=C&lang=1"
+    },
+    {
+      "sequence": 25,
+      "name": "電子標金證書相關格式",
+      "officialDate": "-",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9832&type=C&lang=1"
+    },
+    {
+      "sequence": 26,
+      "name": "共同投標協議書範本",
+      "officialDate": "1140422",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9833&type=C&lang=1"
+    },
+    {
+      "sequence": 27,
+      "name": "押標金保證金連帶保證書格式",
+      "officialDate": "1080530",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9834&type=C&lang=1"
+    },
+    {
+      "sequence": 28,
+      "name": "定期存款單質權設定申請書及覆函格式",
+      "officialDate": "921030",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9835&type=C&lang=1"
+    },
+    {
+      "sequence": 29,
+      "name": "定期存款單實行質權及質權消滅通知書格式",
+      "officialDate": "-",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9836&type=C&lang=1"
+    },
+    {
+      "sequence": 30,
+      "name": "押標金保證金不可撤銷擔保信用狀付款申請書",
+      "officialDate": "-",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9837&type=C&lang=1"
+    },
+    {
+      "sequence": 31,
+      "name": "押標金保證金不可撤銷擔保信用狀格式",
+      "officialDate": "-",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9838&type=C&lang=1"
+    },
+    {
+      "sequence": 32,
+      "name": "押標金連帶保證保險單",
+      "officialDate": "-",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9839&type=C&lang=1"
+    },
+    {
+      "sequence": 33,
+      "name": "押標金擔保信用狀格式",
+      "officialDate": "-",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9840&type=C&lang=1"
+    },
+    {
+      "sequence": 34,
+      "name": "開標/ 議價/ 決標/ 流標/ 廢標紀錄",
+      "officialDate": "-",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9841&type=C&lang=1"
+    },
+    {
+      "sequence": 35,
+      "name": "履約保證金保固保證金連帶保證書格式",
+      "officialDate": "9602",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9842&type=C&lang=1"
+    },
+    {
+      "sequence": 36,
+      "name": "履約保證金連帶保證保險單",
+      "officialDate": "9602",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9843&type=C&lang=1"
+    },
+    {
+      "sequence": 37,
+      "name": "廠商資格履約及賠償連帶保證保險單",
+      "officialDate": "-",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9844&type=C&lang=1"
+    },
+    {
+      "sequence": 38,
+      "name": "廠商履約及賠償連帶保證書格式",
+      "officialDate": "9105",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9845&type=C&lang=1"
+    },
+    {
+      "sequence": 39,
+      "name": "廠商資格履約及賠償連帶保證書格式",
+      "officialDate": "920723",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9847&type=C&lang=1"
+    },
+    {
+      "sequence": 40,
+      "name": "預付款還款保證金不可撤銷擔保信用狀格式",
+      "officialDate": "-",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9848&type=C&lang=1"
+    },
+    {
+      "sequence": 41,
+      "name": "預付款還款保證連帶保證保險單",
+      "officialDate": "-",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9849&type=C&lang=1"
+    },
+    {
+      "sequence": 42,
+      "name": "預付款還款保證連帶保證書格式",
+      "officialDate": "-",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9850&type=C&lang=1"
+    },
+    {
+      "sequence": 43,
+      "name": "預付款還款保證擔保信用狀格式",
+      "officialDate": "-",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9851&type=C&lang=1"
+    },
+    {
+      "sequence": 44,
+      "name": "初驗紀錄",
+      "officialDate": "-",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9852&type=C&lang=1"
+    },
+    {
+      "sequence": 45,
+      "name": "驗收紀錄",
+      "officialDate": "-",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9853&type=C&lang=1"
+    },
+    {
+      "sequence": 46,
+      "name": "工程結算驗收證明書",
+      "officialDate": "1071205",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9854&type=C&lang=1"
+    },
+    {
+      "sequence": 47,
+      "name": "財物結算驗收證明書",
+      "officialDate": "-",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9855&type=C&lang=1"
+    },
+    {
+      "sequence": 48,
+      "name": "勞務結算驗收證明書",
+      "officialDate": "-",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9856&type=C&lang=1"
+    },
+    {
+      "sequence": 49,
+      "name": "結算明細表",
+      "officialDate": "-",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9857&type=C&lang=1"
+    },
+    {
+      "sequence": 50,
+      "name": "保固保證金連帶保證保險單",
+      "officialDate": "-",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9858&type=C&lang=1"
+    },
+    {
+      "sequence": 51,
+      "name": "履約保固保證金擔保信用狀格式",
+      "officialDate": "-",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9859&type=C&lang=1"
+    },
+    {
+      "sequence": 52,
+      "name": "實行質權及消滅通知書格式",
+      "officialDate": "-",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9860&type=C&lang=1"
+    },
+    {
+      "sequence": 53,
+      "name": "查詢押標金保證金相關資料同意書範本",
+      "officialDate": "9404",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9861&type=C&lang=1"
+    },
+    {
+      "sequence": 54,
+      "name": "價格標標價比較表",
+      "officialDate": "960209",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9862&type=C&lang=1"
+    },
+    {
+      "sequence": 55,
+      "name": "投標標價不適用招標文件所定物價指數調整條款聲明書範本",
+      "officialDate": "110 年 12 月 30 日停止適用",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9863&type=C&lang=1"
+    },
+    {
+      "sequence": 56,
+      "name": "藝文採購勞務契約範本",
+      "officialDate": "( 文化部訂定， 1140730)",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9864&type=C&lang=1"
+    },
+    {
+      "sequence": 57,
+      "name": "藝文採購財物契約範本",
+      "officialDate": "( 文化部訂定， 1140113)",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9865&type=C&lang=1"
+    },
+    {
+      "sequence": 58,
+      "name": "採購契約範本附記條款特別聲明",
+      "officialDate": "1150126",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=10012&type=C&lang=1"
+    },
+    {
+      "sequence": 59,
+      "name": "廠商參與政府採購可能涉及之法律責任",
+      "officialDate": "1150727",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=10256&type=C&lang=1"
+    }
   ]
 }
