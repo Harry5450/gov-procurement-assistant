@@ -17,4 +17,6 @@ jobs:
       - run: npm install
       - run: node --check scripts/pcc-watcher.mjs
       - run: node --check scripts/pcc-assets.mjs
+      - run: node --check scripts/pcc-text.mjs
+      - run: npm run pcc:text -- --dry-run
       - run: npm run build
