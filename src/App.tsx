@@ -8,6 +8,7 @@ import { formatRocDate, getTemplateArchive, getTemplateObservation, getTemplateS
 import { templateRegistry } from './templates';
 import { exportTenderInstructionsDraft } from './template-writer';
 import { exportServiceContractDraft } from './service-contract-writer';
+import { exportServiceRequirementsDraft } from './requirements-writer';
 import type { ProcurementCase, ProcurementCategory, SecurityLevel } from './types';
 
 function newCase(): ProcurementCase {
@@ -125,6 +126,19 @@ export default function App() {
       setTemplateWriteStatus(`工程會 ${report.templateVersion} 勞務採購契約初稿已產生。${applied}${pending}${warnings}`);
     } catch (error) {
       setTemplateWriteStatus(error instanceof Error ? error.message : '勞務採購契約初稿產製失敗');
+    }
+  }
+
+  async function exportRequirementsDraft() {
+    setTemplateWriteStatus('正在依案件欄位產製勞務採購需求規格書初稿…');
+    try {
+      const report = await exportServiceRequirementsDraft(current);
+      const applied = report.applied.length ? `已建立章節：${report.applied.join('、')}` : '尚無完整章節可直接建立';
+      const pending = report.pending.length ? `；待人工補充：${report.pending.join('、')}` : '';
+      const warnings = report.warnings.length ? `；一致性警示：${report.warnings.join(' ')}` : '';
+      setTemplateWriteStatus(`勞務採購需求規格書 DOCX 初稿已產生。${applied}${pending}${warnings}`);
+    } catch (error) {
+      setTemplateWriteStatus(error instanceof Error ? error.message : '需求規格書初稿產製失敗');
     }
   }
 
@@ -285,7 +299,10 @@ export default function App() {
             <button className="secondary" onClick={() => void exportCaseDocx(current, rules)}>匯出 DOCX 檢核表</button>
             <button onClick={() => void exportTenderDraft()}>產出工程會投標須知 DOCX 初稿</button>
             {current.category === 'service' && (
-              <button onClick={() => void exportServiceDraft()}>產出工程會勞務採購契約 ODT 初稿</button>
+              <>
+                <button onClick={() => void exportServiceDraft()}>產出工程會勞務採購契約 ODT 初稿</button>
+                <button onClick={() => void exportRequirementsDraft()}>產出勞務採購需求規格書 DOCX 初稿</button>
+              </>
             )}
             {templateWriteStatus && <p className="template-write-status">{templateWriteStatus}</p>}
           </div>
