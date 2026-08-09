@@ -6,6 +6,7 @@ import { completenessScore, evaluateCase } from './rules';
 import { buildSanitizedAIContext } from './privacy';
 import { formatRocDate, getTemplateArchive, getTemplateObservation, getTemplateSyncStatus, pccTemplateIndex } from './pcc';
 import { templateRegistry } from './templates';
+import { exportTenderInstructionsDraft } from './template-writer';
 import type { ProcurementCase, ProcurementCategory, SecurityLevel } from './types';
 
 function newCase(): ProcurementCase {
@@ -59,6 +60,7 @@ export default function App() {
   const [cases, setCases] = useState<ProcurementCase[]>([]);
   const [saved, setSaved] = useState(false);
   const [aiPreview, setAiPreview] = useState('');
+  const [templateWriteStatus, setTemplateWriteStatus] = useState('');
 
   const rules = useMemo(() => evaluateCase(current), [current]);
   const score = useMemo(() => completenessScore(current), [current]);
@@ -74,6 +76,7 @@ export default function App() {
 
   function patch<K extends keyof ProcurementCase>(key: K, value: ProcurementCase[K]) {
     setSaved(false);
+    setTemplateWriteStatus('');
     setCurrent((prev) => ({ ...prev, [key]: value, updatedAt: new Date().toISOString() }));
   }
 
@@ -95,6 +98,19 @@ export default function App() {
       setAiPreview(JSON.stringify(context, null, 2));
     } catch (error) {
       setAiPreview(error instanceof Error ? error.message : '無法建立 AI 外送內容');
+    }
+  }
+
+  async function exportTenderDraft() {
+    setTemplateWriteStatus('正在以工程會官方 DOCX 產製投標須知初稿…');
+    try {
+      const report = await exportTenderInstructionsDraft(current);
+      const applied = report.applied.length ? `已帶入：${report.applied.join('、')}` : '尚無欄位自動帶入';
+      const pending = report.pending.length ? `；待人工確認：${report.pending.join('、')}` : '';
+      const warnings = report.warnings.length ? `；注意：${report.warnings.join(' ')}` : '';
+      setTemplateWriteStatus(`工程會 ${report.templateVersion} 投標須知初稿已產生。${applied}${pending}${warnings}`);
+    } catch (error) {
+      setTemplateWriteStatus(error instanceof Error ? error.message : '投標須知初稿產製失敗');
     }
   }
 
@@ -253,6 +269,8 @@ export default function App() {
             <button onClick={() => void save()}>儲存到本機</button>
             <button className="secondary" onClick={() => exportCaseJson(current)}>匯出 JSON 備份</button>
             <button className="secondary" onClick={() => void exportCaseDocx(current, rules)}>匯出 DOCX 檢核表</button>
+            <button onClick={() => void exportTenderDraft()}>產出工程會投標須知 DOCX 初稿</button>
+            {templateWriteStatus && <p className="template-write-status">{templateWriteStatus}</p>}
           </div>
         </section>
       </main>
