@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { deleteCase, listCases, upsertCase } from './db';
 import { exportCaseDocx, exportCaseJson } from './export';
+import { buildAllTemplateMappingPreviews } from './mapping';
 import { completenessScore, evaluateCase } from './rules';
 import { buildSanitizedAIContext } from './privacy';
 import { formatRocDate, getTemplateArchive, getTemplateObservation, getTemplateSyncStatus, pccTemplateIndex } from './pcc';
@@ -20,6 +21,12 @@ function newCase(): ProcurementCase {
     acceptanceMethod: '',
     deliverables: [],
     vendorQualification: '',
+    procurementMethod: '',
+    awardPrinciple: '',
+    awardMethod: '',
+    bidBond: '',
+    performanceBond: '',
+    contractPriceMethod: '',
     internalNotes: '',
     securityLevel: 'INTERNAL',
     createdAt: now,
@@ -55,6 +62,7 @@ export default function App() {
 
   const rules = useMemo(() => evaluateCase(current), [current]);
   const score = useMemo(() => completenessScore(current), [current]);
+  const mappingPreviews = useMemo(() => buildAllTemplateMappingPreviews(current), [current]);
 
   async function refresh() {
     setCases(await listCases());
@@ -152,7 +160,20 @@ export default function App() {
           </div>
 
           <div className="card">
-            <h2>2. 履約、驗收與資格</h2>
+            <h2>2. 招標與決標設定</h2>
+            <p className="muted">這些欄位會映射到投標須知與契約；系統只維持跨文件一致，不自動替承辦人判斷法定招標或決標方式。</p>
+            <div className="form-grid">
+              <label>招標方式<input value={current.procurementMethod ?? ''} onChange={(e) => patch('procurementMethod', e.target.value)} placeholder="例如：公開招標／公開取得報價或企劃書" /></label>
+              <label>決標原則<input value={current.awardPrinciple ?? ''} onChange={(e) => patch('awardPrinciple', e.target.value)} placeholder="例如：最低標／最有利標" /></label>
+              <label>決標方式<input value={current.awardMethod ?? ''} onChange={(e) => patch('awardMethod', e.target.value)} placeholder="例如：總價決標" /></label>
+              <label>契約價金計算方式<input value={current.contractPriceMethod ?? ''} onChange={(e) => patch('contractPriceMethod', e.target.value)} placeholder="例如：總包價法／單價計算法" /></label>
+              <label>押標金<input value={current.bidBond ?? ''} onChange={(e) => patch('bidBond', e.target.value)} placeholder="例如：免收／一定金額 30,000 元" /></label>
+              <label>履約保證金<input value={current.performanceBond ?? ''} onChange={(e) => patch('performanceBond', e.target.value)} placeholder="例如：免收／契約金額 10%" /></label>
+            </div>
+          </div>
+
+          <div className="card">
+            <h2>3. 履約、驗收與資格</h2>
             <div className="form-grid">
               <label>付款條件<input value={current.paymentTerms} onChange={(e) => patch('paymentTerms', e.target.value)} placeholder="例如：每季驗收合格後付款" /></label>
               <label>驗收方式<input value={current.acceptanceMethod} onChange={(e) => patch('acceptanceMethod', e.target.value)} placeholder="例如：成果報告＋功能測試" /></label>
@@ -162,7 +183,7 @@ export default function App() {
           </div>
 
           <div className="card security-card">
-            <h2>3. 機敏資料控管</h2>
+            <h2>4. 機敏資料控管</h2>
             <div className="form-grid">
               <label>案件安全等級<select value={current.securityLevel} onChange={(e) => patch('securityLevel', e.target.value as SecurityLevel)}>{Object.entries(securityNames).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
               <label>底價／預估底價（高度敏感）<input type="number" value={current.reservePrice ?? ''} onChange={(e) => patch('reservePrice', e.target.value ? Number(e.target.value) : undefined)} placeholder="如有填寫，禁止外送 LLM" /></label>
@@ -173,7 +194,7 @@ export default function App() {
           </div>
 
           <div className="card">
-            <h2>4. 系統判斷的文件清單</h2>
+            <h2>5. 系統判斷的文件清單</h2>
             <div className="columns">
               <div><h3>必要文件</h3><ul>{rules.requiredDocuments.map((item) => <li key={item}>✅ {item}</li>)}</ul></div>
               <div><h3>可能需要</h3><ul>{rules.optionalDocuments.map((item) => <li key={item}>◻️ {item}</li>)}</ul></div>
@@ -183,8 +204,31 @@ export default function App() {
           </div>
 
           <div className="card">
-            <h2>5. 工程會範本 Registry</h2>
-            <p className="muted">PCC Watcher 會監測公開索引，並另外封存核心範本的 DOCX / ODT / PDF 與 SHA-256。偵測到新版時只建立 candidate，必須人工確認後才可更新 active 範本。</p>
+            <h2>6. 官方範本欄位 Mapping</h2>
+            <p className="muted">同一個 ProcurementCase 是所有文件的單一資料來源。下面顯示目前資料可以填入哪些官方範本位置，以及仍缺哪些必要欄位。</p>
+            <div className="template-list">
+              {mappingPreviews.map((preview) => (
+                <div className="mapping-block" key={preview.templateId}>
+                  <div className="template-row">
+                    <span><strong>{preview.templateName}</strong><small>必要欄位 {preview.readyRequiredCount}/{preview.requiredCount}</small></span>
+                    <span className={`tag ${preview.coverage === 100 ? 'current' : 'candidate'}`}>{preview.coverage}%</span>
+                  </div>
+                  <ul>
+                    {preview.rows.map((row) => (
+                      <li key={`${preview.templateId}-${row.key}`}>
+                        {row.ready ? '✅' : row.required ? '⚠️' : '◻️'} <strong>{row.canonicalLabel}</strong> → {row.targetLabel}：{row.ready ? row.value : '待填'}
+                        <small className="muted"> · Anchor：{row.anchor}{row.note ? ` · ${row.note}` : ''}</small>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="card">
+            <h2>7. 工程會範本 Registry</h2>
+            <p className="muted">PCC Watcher 會監測公開索引，並另外封存核心範本的 Word / ODT / PDF 與 SHA-256。偵測到新版時只建立 candidate，必須人工確認後才可更新 active 範本。</p>
             <div className="template-list">
               {applicableTemplates.map((item) => {
                 const observed = getTemplateObservation(item);
