@@ -27,13 +27,19 @@ function textContent(value) {
     .trim();
 }
 
+function firstHref(value) {
+  const match = value.match(/<a\b[^>]*\bhref=["']([^"']+)["'][^>]*>/i);
+  return match ? decodeHtml(match[1]) : undefined;
+}
+
 function parseRows(html) {
   const rows = [];
   const rowPattern = /<tr\b[^>]*>([\s\S]*?)<\/tr>/gi;
   const cellPattern = /<t[dh]\b[^>]*>([\s\S]*?)<\/t[dh]>/gi;
 
   for (const rowMatch of html.matchAll(rowPattern)) {
-    const cells = [...rowMatch[1].matchAll(cellPattern)].map((match) => textContent(match[1]));
+    const cellHtml = [...rowMatch[1].matchAll(cellPattern)].map((match) => match[1]);
+    const cells = cellHtml.map(textContent);
     if (cells.length < 3) continue;
 
     const sequence = Number(cells[0]);
@@ -43,7 +49,10 @@ function parseRows(html) {
     const officialDate = cells[2];
     if (!name) continue;
 
-    rows.push({ sequence, name, officialDate });
+    const href = firstHref(cellHtml[1] ?? '');
+    const detailUrl = href ? new URL(href, SOURCE_URL).toString() : undefined;
+
+    rows.push({ sequence, name, officialDate, ...(detailUrl ? { detailUrl } : {}) });
   }
 
   return rows.sort((a, b) => a.sequence - b.sequence);
@@ -51,7 +60,7 @@ function parseRows(html) {
 
 const response = await fetch(SOURCE_URL, {
   headers: {
-    'user-agent': 'GovProcure-Assistant-PCC-Watcher/0.1 (+GitHub Actions)',
+    'user-agent': 'GovProcure-Assistant-PCC-Watcher/0.2 (+GitHub Actions)',
     accept: 'text/html,application/xhtml+xml',
   },
   signal: AbortSignal.timeout(30000),
@@ -72,6 +81,11 @@ const coreNames = ['投標須知範本', '工程採購契約範本', '財物採�
 const missingCore = coreNames.filter((name) => !items.some((item) => item.name === name));
 if (missingCore.length > 0) {
   throw new Error(`PCC parser safety check failed: missing core templates: ${missingCore.join(', ')}`);
+}
+
+const missingDetailUrl = coreNames.filter((name) => !items.find((item) => item.name === name)?.detailUrl);
+if (missingDetailUrl.length > 0) {
+  throw new Error(`PCC parser safety check failed: missing detail URLs for core templates: ${missingDetailUrl.join(', ')}`);
 }
 
 const payload = {
