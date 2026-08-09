@@ -1,5 +1,6 @@
 import { Document, HeadingLevel, Packer, Paragraph, TextRun } from 'docx';
 import { saveAs } from 'file-saver';
+import { buildAllTemplateMappingPreviews } from './mapping';
 import type { ProcurementCase, RuleResult } from './types';
 
 export async function exportCaseDocx(procurementCase: ProcurementCase, rules: RuleResult) {
@@ -9,10 +10,17 @@ export async function exportCaseDocx(procurementCase: ProcurementCase, rules: Ru
     ['採購類型', procurementCase.category],
     ['預算', procurementCase.budget ? `NT$ ${procurementCase.budget.toLocaleString()}` : '未填'],
     ['履約期間', `${procurementCase.contractStart || '未填'} ～ ${procurementCase.contractEnd || '未填'}`],
+    ['招標方式', procurementCase.procurementMethod || '未填'],
+    ['決標原則', procurementCase.awardPrinciple || '未填'],
+    ['決標方式', procurementCase.awardMethod || '未填'],
+    ['契約價金計算方式', procurementCase.contractPriceMethod || '未填'],
+    ['押標金', procurementCase.bidBond || '未填'],
+    ['履約保證金', procurementCase.performanceBond || '未填'],
     ['付款條件', procurementCase.paymentTerms || '未填'],
     ['驗收方式', procurementCase.acceptanceMethod || '未填'],
     ['廠商資格', procurementCase.vendorQualification || '未填'],
   ];
+  const mappingPreviews = buildAllTemplateMappingPreviews(procurementCase);
 
   const doc = new Document({
     sections: [
@@ -35,6 +43,21 @@ export async function exportCaseDocx(procurementCase: ProcurementCase, rules: Ru
           ...(rules.warnings.length
             ? rules.warnings.map((item) => new Paragraph({ text: item, bullet: { level: 0 } }))
             : [new Paragraph('目前無警示。')]),
+          new Paragraph({ text: '官方範本欄位 Mapping', heading: HeadingLevel.HEADING_1 }),
+          ...mappingPreviews.flatMap((preview) => [
+            new Paragraph({
+              children: [
+                new TextRun({ text: `${preview.templateName}：`, bold: true }),
+                new TextRun(`必要欄位 ${preview.readyRequiredCount}/${preview.requiredCount}，覆蓋率 ${preview.coverage}%`),
+              ],
+            }),
+            ...preview.rows.map((row) =>
+              new Paragraph({
+                text: `${row.ready ? '已填' : row.required ? '待補' : '選填'}｜${row.canonicalLabel} → ${row.targetLabel}｜${row.value || '未填'}｜Anchor: ${row.anchor}`,
+                bullet: { level: 0 },
+              }),
+            ),
+          ]),
         ],
       },
     ],
