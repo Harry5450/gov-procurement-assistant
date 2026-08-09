@@ -207,5 +207,29 @@ export function validateCanonicalConsistency(procurementCase: ProcurementCase) {
     issues.push('勞務案件尚未設定主要交付成果，契約與需求規格書容易產生不一致。');
   }
 
+  const pricingItems = (procurementCase.pricingItems ?? []).filter((item) => item.description.trim());
+  const estimatedItems = pricingItems.filter(
+    (item) => item.quantity !== undefined && item.quantity > 0 && item.estimatedUnitPrice !== undefined,
+  );
+
+  if (pricingItems.length && estimatedItems.length > 0 && estimatedItems.length < pricingItems.length) {
+    issues.push('標價項目僅部分填有數量與內部預估單價，暫時無法完成預算總額一致性檢查。');
+  }
+
+  if (pricingItems.length > 0 && estimatedItems.length === pricingItems.length && procurementCase.budget > 0) {
+    const estimateTotal = estimatedItems.reduce(
+      (sum, item) => sum + (item.quantity ?? 0) * (item.estimatedUnitPrice ?? 0),
+      0,
+    );
+    const difference = procurementCase.budget - estimateTotal;
+    if (Math.abs(difference) >= 1) {
+      issues.push(
+        difference > 0
+          ? `標價清單內部預估合計較預算少新臺幣 ${Math.round(difference).toLocaleString('zh-TW')} 元。`
+          : `標價清單內部預估合計超過預算新臺幣 ${Math.round(Math.abs(difference)).toLocaleString('zh-TW')} 元。`,
+      );
+    }
+  }
+
   return issues;
 }
