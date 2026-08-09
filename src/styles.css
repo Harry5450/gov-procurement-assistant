@@ -59,6 +59,10 @@ li { margin-bottom: 7px; }
 .template-row { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 12px 0; border-bottom: 1px solid #edf0f5; }
 .template-row span:first-child { display: grid; gap: 3px; }
 .template-row small { color: #77849a; }
+.mapping-block { border: 1px solid #e5eaf2; border-radius: 12px; padding: 0 14px 10px; }
+.mapping-block ul { margin: 10px 0 0; padding-left: 18px; }
+.mapping-block li { line-height: 1.55; }
+.mapping-block li small { display: inline; font-size: 11px; }
 .tag { background: #edf4ff; color: #325b9e; border-radius: 999px; padding: 5px 9px; font-size: 12px; font-weight: 800; white-space: nowrap; }
 .tag.current { background: #e9f7ef; color: #1c6b42; }
 .tag.candidate { background: #fff4da; color: #875c05; }
@@ -79,4 +83,5 @@ li { margin-bottom: 7px; }
   .card { padding: 16px; border-radius: 13px; }
   .privacy-badge { white-space: normal; }
   .template-row { align-items: flex-start; }
+  .mapping-block { padding-left: 11px; padding-right: 11px; }
 }
