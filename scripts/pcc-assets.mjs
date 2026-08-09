@@ -33,6 +33,7 @@ function textContent(value) {
       .replace(/<br\s*\/?\s*>/gi, ' ')
       .replace(/<[^>]+>/g, ' '),
   )
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -62,7 +63,7 @@ async function readJson(path, fallback) {
 async function fetchText(url) {
   const response = await fetch(url, {
     headers: {
-      'user-agent': 'GovProcure-Assistant-PCC-Asset-Watcher/0.1 (+GitHub Actions)',
+      'user-agent': 'GovProcure-Assistant-PCC-Asset-Watcher/0.2 (+GitHub Actions)',
       accept: 'text/html,application/xhtml+xml',
     },
     signal: AbortSignal.timeout(30000),
@@ -73,6 +74,16 @@ async function fetchText(url) {
   }
 
   return response.text();
+}
+
+function selectPrimaryFiles(files) {
+  const docx = files.find((file) => file.format === 'docx');
+  const doc = files.find((file) => file.format === 'doc');
+  const odt = files.find((file) => file.format === 'odt');
+  const pdf = files.find((file) => file.format === 'pdf');
+  const word = docx ?? doc;
+
+  return word && odt && pdf ? [word, odt, pdf] : null;
 }
 
 function parseLatestPrimaryAssetGroup(html, templateName, detailUrl) {
@@ -101,20 +112,20 @@ function parseLatestPrimaryAssetGroup(html, templateName, detailUrl) {
       const officialFilename = parsed.searchParams.get('sname') ?? '';
       const extensionMatch = officialFilename.match(/\.([a-z0-9]+)$/i);
       const format = extensionMatch?.[1]?.toLowerCase();
-      if (!format || !['docx', 'odt', 'pdf'].includes(format)) continue;
+      if (!format || !['doc', 'docx', 'odt', 'pdf'].includes(format)) continue;
       files.push({ format, officialFilename, sourceUrl });
     }
 
-    const formats = new Set(files.map((file) => file.format));
-    if (['docx', 'odt', 'pdf'].every((format) => formats.has(format))) {
-      candidates.push({ version, title, files });
+    const primaryFiles = selectPrimaryFiles(files);
+    if (primaryFiles) {
+      candidates.push({ version, title, files: primaryFiles });
     }
   }
 
   candidates.sort((a, b) => Number(b.version) - Number(a.version));
   const latest = candidates[0];
   if (!latest) {
-    throw new Error(`No complete DOCX/ODT/PDF primary asset group found for ${templateName} (${detailUrl}).`);
+    throw new Error(`No complete Word/ODT/PDF primary asset group found for ${templateName} (${detailUrl}).`);
   }
 
   return latest;
@@ -132,12 +143,19 @@ function validateFile(buffer, format, sourceUrl) {
   if ((format === 'docx' || format === 'odt') && buffer.subarray(0, 2).toString('ascii') !== 'PK') {
     throw new Error(`Downloaded ${format.toUpperCase()} failed ZIP signature validation: ${sourceUrl}`);
   }
+
+  if (format === 'doc') {
+    const oleSignature = Buffer.from([0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1]);
+    if (!buffer.subarray(0, 8).equals(oleSignature)) {
+      throw new Error(`Downloaded DOC failed OLE Compound File signature validation: ${sourceUrl}`);
+    }
+  }
 }
 
 async function downloadFile(file) {
   const response = await fetch(file.sourceUrl, {
     headers: {
-      'user-agent': 'GovProcure-Assistant-PCC-Asset-Watcher/0.1 (+GitHub Actions)',
+      'user-agent': 'GovProcure-Assistant-PCC-Asset-Watcher/0.2 (+GitHub Actions)',
       accept: 'application/octet-stream,*/*',
     },
     signal: AbortSignal.timeout(60000),
