@@ -10,6 +10,11 @@ export interface RequirementsDraftReport {
   warnings: string[];
 }
 
+export interface RequirementsWriterOptions {
+  download?: boolean;
+  onGenerated?: (blob: Blob, filename: string) => void;
+}
+
 export interface RequirementsSection {
   id: string;
   title: string;
@@ -173,7 +178,10 @@ function sectionParagraphs(section: RequirementsSection) {
   return output;
 }
 
-export async function exportServiceRequirementsDraft(procurementCase: ProcurementCase): Promise<RequirementsDraftReport> {
+export async function exportServiceRequirementsDraft(
+  procurementCase: ProcurementCase,
+  options: RequirementsWriterOptions = {},
+): Promise<RequirementsDraftReport> {
   const model = buildServiceRequirementsModel(procurementCase);
   const applied = model.sections.filter((section) => section.ready).map((section) => section.title.replace(/^[一二三四五六七八九十]+、/, ''));
 
@@ -202,7 +210,9 @@ export async function exportServiceRequirementsDraft(procurementCase: Procuremen
   const doc = new Document({ sections: [{ children }] });
   const blob = await Packer.toBlob(doc);
   const safeName = (procurementCase.title || '採購案件').replace(/[\\/:*?"<>|]/g, '_');
-  saveAs(blob, `${safeName}_勞務採購需求規格書_初稿.docx`);
+  const filename = `${safeName}_勞務採購需求規格書_初稿.docx`;
+  options.onGenerated?.(blob, filename);
+  if (options.download !== false) saveAs(blob, filename);
 
   return {
     documentType: 'service-requirements',
