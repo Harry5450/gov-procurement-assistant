@@ -1,5 +1,158 @@
 {
   "schemaVersion": 1,
   "sourceIndexUrl": "https://www.pcc.gov.tw/content/index?eid=10146&lang=1&type=C",
-  "templates": []
+  "templates": [
+    {
+      "id": "tender-instructions",
+      "name": "投標須知範本",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?type=C&eid=9808&lang=1",
+      "latestObservedVersion": "1150727",
+      "versions": [
+        {
+          "version": "1150727",
+          "title": "投標須知範本（1150727）",
+          "files": [
+            {
+              "format": "docx",
+              "path": "official-templates/tender-instructions/1150727/tender-instructions.docx",
+              "sha256": "1db45aeb0da230cd9f3c70b70ed5bd1f385f3a628ff6692109749495865d407f",
+              "size": 64984,
+              "sourceUrl": "https://www.pcc.gov.tw/downloadFile?fpath=YXJ0aWNsZS8xNzg1MzE0MjUxNjExLmRvY3g%3D&sname=%E6%8A%95%E6%A8%99%E9%A0%88%E7%9F%A5%E7%AF%84%E6%9C%AC%EF%BC%881150727%EF%BC%89.docx",
+              "officialFilename": "投標須知範本（1150727）.docx"
+            },
+            {
+              "format": "odt",
+              "path": "official-templates/tender-instructions/1150727/tender-instructions.odt",
+              "sha256": "e99e6b107abf36a8ebb3dc72c567b5d57b6d86317279042572b9ee92d7577123",
+              "size": 62890,
+              "sourceUrl": "https://www.pcc.gov.tw/downloadFile?fpath=YXJ0aWNsZS8xNzg1MzE0MjUxNjExLm9kdA%3D%3D&sname=%E6%8A%95%E6%A8%99%E9%A0%88%E7%9F%A5%E7%AF%84%E6%9C%AC%EF%BC%881150727%EF%BC%89.odt",
+              "officialFilename": "投標須知範本（1150727）.odt"
+            },
+            {
+              "format": "pdf",
+              "path": "official-templates/tender-instructions/1150727/tender-instructions.pdf",
+              "sha256": "32f8d789a8ab72122771c743e9e4b0ef3ed08b7c7ddcbf3a1d9ea7a6ca684315",
+              "size": 367992,
+              "sourceUrl": "https://www.pcc.gov.tw/downloadFile?fpath=YXJ0aWNsZS8xNzg1MzE0MjUxNjExLnBkZg%3D%3D&sname=%E6%8A%95%E6%A8%99%E9%A0%88%E7%9F%A5%E7%AF%84%E6%9C%AC%EF%BC%881150727%EF%BC%89.pdf",
+              "officialFilename": "投標須知範本（1150727）.pdf"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "construction-contract",
+      "name": "工程採購契約範本",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9812&type=C&lang=1",
+      "latestObservedVersion": "1141230",
+      "versions": [
+        {
+          "version": "1141230",
+          "title": "工程採購契約範本（1141230）",
+          "files": [
+            {
+              "format": "docx",
+              "path": "official-templates/construction-contract/1141230/construction-contract.docx",
+              "sha256": "71b822622664b8befb148befe3289d3463489da33b5724bfcc9dcb0d96cc6a5f",
+              "size": 92863,
+              "sourceUrl": "https://www.pcc.gov.tw/downloadFile?fpath=YXJ0aWNsZS8xNzY3MDU3MTM0MjUyLmRvY3g%3D&sname=%E5%B7%A5%E7%A8%8B%E6%8E%A1%E8%B3%BC%E5%A5%91%E7%B4%84%E7%AF%84%E6%9C%AC%EF%BC%881141230%EF%BC%89.docx",
+              "officialFilename": "工程採購契約範本（1141230）.docx"
+            },
+            {
+              "format": "odt",
+              "path": "official-templates/construction-contract/1141230/construction-contract.odt",
+              "sha256": "f59ce23c9e161c657dff8510aa1860302b7434412698843a75c08d90b4974d2c",
+              "size": 97265,
+              "sourceUrl": "https://www.pcc.gov.tw/downloadFile?fpath=YXJ0aWNsZS8xNzY3MDU3MTM0MjUyLm9kdA%3D%3D&sname=%E5%B7%A5%E7%A8%8B%E6%8E%A1%E8%B3%BC%E5%A5%91%E7%B4%84%E7%AF%84%E6%9C%AC%EF%BC%881141230%EF%BC%89.odt",
+              "officialFilename": "工程採購契約範本（1141230）.odt"
+            },
+            {
+              "format": "pdf",
+              "path": "official-templates/construction-contract/1141230/construction-contract.pdf",
+              "sha256": "8875ca3bf9aaa3407c72381749afceac4d3ce6e150c20fcf3b24f37091ca0d1b",
+              "size": 1194274,
+              "sourceUrl": "https://www.pcc.gov.tw/downloadFile?fpath=YXJ0aWNsZS8xNzY3MDU3MTM0MjUyLnBkZg%3D%3D&sname=%E5%B7%A5%E7%A8%8B%E6%8E%A1%E8%B3%BC%E5%A5%91%E7%B4%84%E7%AF%84%E6%9C%AC%EF%BC%881141230%EF%BC%89.pdf",
+              "officialFilename": "工程採購契約範本（1141230）.pdf"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "goods-contract",
+      "name": "財物採購契約範本",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9815&type=C&lang=1",
+      "latestObservedVersion": "1141230",
+      "versions": [
+        {
+          "version": "1141230",
+          "title": "財物採購契約範本（1141230）",
+          "files": [
+            {
+              "format": "docx",
+              "path": "official-templates/goods-contract/1141230/goods-contract.docx",
+              "sha256": "240025b43756f9e9bd9ae24273c5a6782334ede1e88df0be874a84277dacb78b",
+              "size": 72281,
+              "sourceUrl": "https://www.pcc.gov.tw/downloadFile?fpath=YXJ0aWNsZS8xNzY3MDU4NzE3MjIzLmRvY3g%3D&sname=%E8%B2%A1%E7%89%A9%E6%8E%A1%E8%B3%BC%E5%A5%91%E7%B4%84%E7%AF%84%E6%9C%AC%EF%BC%881141230%EF%BC%89.docx",
+              "officialFilename": "財物採購契約範本（1141230）.docx"
+            },
+            {
+              "format": "odt",
+              "path": "official-templates/goods-contract/1141230/goods-contract.odt",
+              "sha256": "9cfd24702b79756e1405317d522d6abc3c950f924ffcf260a38ce854f10dae84",
+              "size": 70811,
+              "sourceUrl": "https://www.pcc.gov.tw/downloadFile?fpath=YXJ0aWNsZS8xNzY3MDU4NzE3MjIzLm9kdA%3D%3D&sname=%E8%B2%A1%E7%89%A9%E6%8E%A1%E8%B3%BC%E5%A5%91%E7%B4%84%E7%AF%84%E6%9C%AC%EF%BC%881141230%EF%BC%89.odt",
+              "officialFilename": "財物採購契約範本（1141230）.odt"
+            },
+            {
+              "format": "pdf",
+              "path": "official-templates/goods-contract/1141230/goods-contract.pdf",
+              "sha256": "569c6a7a54b6ff4034e212d8111d20ef5f0e06b027cd8b121ae108ff65061359",
+              "size": 727307,
+              "sourceUrl": "https://www.pcc.gov.tw/downloadFile?fpath=YXJ0aWNsZS8xNzY3MDU4NzE3MjIzLnBkZg%3D%3D&sname=%E8%B2%A1%E7%89%A9%E6%8E%A1%E8%B3%BC%E5%A5%91%E7%B4%84%E7%AF%84%E6%9C%AC%EF%BC%881141230%EF%BC%89.pdf",
+              "officialFilename": "財物採購契約範本（1141230）.pdf"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "service-contract",
+      "name": "勞務採購契約範本",
+      "detailUrl": "https://www.pcc.gov.tw/content/index?eid=9816&type=C&lang=1",
+      "latestObservedVersion": "1141231",
+      "versions": [
+        {
+          "version": "1141231",
+          "title": "勞務採購契約範本（1141231）",
+          "files": [
+            {
+              "format": "doc",
+              "path": "official-templates/service-contract/1141231/service-contract.doc",
+              "sha256": "26abe3be04af9e32cc0e2e152580771a1d89298a804e2c2f820d3aa9aa652808",
+              "size": 292352,
+              "sourceUrl": "https://www.pcc.gov.tw/downloadFile?fpath=YXJ0aWNsZS8xNzY3MTQ1MjU2NjQ2LmRvYw%3D%3D&sname=%E5%8B%9E%E5%8B%99%E6%8E%A1%E8%B3%BC%E5%A5%91%E7%B4%84%E7%AF%84%E6%9C%AC%EF%BC%881141231%EF%BC%89.doc",
+              "officialFilename": "勞務採購契約範本（1141231）.doc"
+            },
+            {
+              "format": "odt",
+              "path": "official-templates/service-contract/1141231/service-contract.odt",
+              "sha256": "013b21ab1bce0bc987ccd236151d3257aab55366d9234622fa0da8e0ec132421",
+              "size": 89765,
+              "sourceUrl": "https://www.pcc.gov.tw/downloadFile?fpath=YXJ0aWNsZS8xNzY3MTQ1MjU2NjQ2Lm9kdA%3D%3D&sname=%E5%8B%9E%E5%8B%99%E6%8E%A1%E8%B3%BC%E5%A5%91%E7%B4%84%E7%AF%84%E6%9C%AC%EF%BC%881141231%EF%BC%89.odt",
+              "officialFilename": "勞務採購契約範本（1141231）.odt"
+            },
+            {
+              "format": "pdf",
+              "path": "official-templates/service-contract/1141231/service-contract.pdf",
+              "sha256": "8b7e6b53a60f82c385d6f59e6ae8cc65174a50ab9d2d3fa666dae71963c91411",
+              "size": 892690,
+              "sourceUrl": "https://www.pcc.gov.tw/downloadFile?fpath=YXJ0aWNsZS8xNzY3MTQ1MjU2NjQ2LnBkZg%3D%3D&sname=%E5%8B%9E%E5%8B%99%E6%8E%A1%E8%B3%BC%E5%A5%91%E7%B4%84%E7%AF%84%E6%9C%AC%EF%BC%881141231%EF%BC%89.pdf",
+              "officialFilename": "勞務採購契約範本（1141231）.pdf"
+            }
+          ]
+        }
+      ]
+    }
+  ]
 }
