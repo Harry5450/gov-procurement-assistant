@@ -21,3 +21,4 @@ jobs:
       - run: npm run pcc:text -- --dry-run
       - run: npm run template:smoke
       - run: npm run build
+      - run: npm run e2e
