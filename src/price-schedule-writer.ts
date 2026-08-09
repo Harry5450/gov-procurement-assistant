@@ -10,6 +10,11 @@ export interface PriceScheduleReport {
   budgetDifference?: number;
 }
 
+export interface PriceScheduleWriterOptions {
+  download?: boolean;
+  onGenerated?: (blob: Blob, filename: string) => void;
+}
+
 function safeName(value: string) {
   return (value || '採購案件').replace(/[\\/:*?"<>|]/g, '_');
 }
@@ -77,7 +82,10 @@ function thinBorder(): Partial<ExcelJS.Borders> {
   return { top: side, left: side, bottom: side, right: side };
 }
 
-export async function exportPriceScheduleXlsx(procurementCase: ProcurementCase): Promise<PriceScheduleReport> {
+export async function exportPriceScheduleXlsx(
+  procurementCase: ProcurementCase,
+  options: PriceScheduleWriterOptions = {},
+): Promise<PriceScheduleReport> {
   const items = normalizedItems(procurementCase);
   if (!items.length) {
     throw new Error('尚未建立標價項目。請先新增標價項目，或由主要交付成果建立項目。');
@@ -206,7 +214,9 @@ export async function exportPriceScheduleXlsx(procurementCase: ProcurementCase):
   const blob = new Blob([buffer as BlobPart], {
     type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
   });
-  saveAs(blob, `${safeName(procurementCase.title)}_標價清單_初稿.xlsx`);
+  const filename = `${safeName(procurementCase.title)}_標價清單_初稿.xlsx`;
+  options.onGenerated?.(blob, filename);
+  if (options.download !== false) saveAs(blob, filename);
 
   return report;
 }
