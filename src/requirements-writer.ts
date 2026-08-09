@@ -10,6 +10,11 @@ export interface RequirementsDraftReport {
   warnings: string[];
 }
 
+export interface RequirementsWriterOptions {
+  download?: boolean;
+  onGenerated?: (blob: Blob, filename: string) => void;
+}
+
 export interface RequirementsSection {
   id: string;
   title: string;
@@ -53,13 +58,21 @@ function present(label: string, value: string, pending: string[]) {
   return '【待機關填列】';
 }
 
+function outwardConsistencyWarnings(procurementCase: ProcurementCase) {
+  return validateCanonicalConsistency(procurementCase).filter((warning) =>
+    !warning.includes('底價／預估底價')
+    && !warning.includes('標價項目僅部分填有')
+    && !warning.includes('標價清單內部預估合計'),
+  );
+}
+
 export function buildServiceRequirementsModel(procurementCase: ProcurementCase): ServiceRequirementsModel {
   if (procurementCase.category !== 'service') {
     throw new Error('需求規格書 Writer 目前只適用於採購類型為「勞務」的案件。');
   }
 
   const pending: string[] = [];
-  const warnings = validateCanonicalConsistency(procurementCase);
+  const warnings = outwardConsistencyWarnings(procurementCase);
   const agency = present('機關名稱', safeText(procurementCase.agency), pending);
   const title = present('標案名稱', safeText(procurementCase.title), pending);
   const budget = present('預算金額', money(procurementCase.budget), pending);
@@ -173,7 +186,10 @@ function sectionParagraphs(section: RequirementsSection) {
   return output;
 }
 
-export async function exportServiceRequirementsDraft(procurementCase: ProcurementCase): Promise<RequirementsDraftReport> {
+export async function exportServiceRequirementsDraft(
+  procurementCase: ProcurementCase,
+  options: RequirementsWriterOptions = {},
+): Promise<RequirementsDraftReport> {
   const model = buildServiceRequirementsModel(procurementCase);
   const applied = model.sections.filter((section) => section.ready).map((section) => section.title.replace(/^[一二三四五六七八九十]+、/, ''));
 
@@ -202,7 +218,9 @@ export async function exportServiceRequirementsDraft(procurementCase: Procuremen
   const doc = new Document({ sections: [{ children }] });
   const blob = await Packer.toBlob(doc);
   const safeName = (procurementCase.title || '採購案件').replace(/[\\/:*?"<>|]/g, '_');
-  saveAs(blob, `${safeName}_勞務採購需求規格書_初稿.docx`);
+  const filename = `${safeName}_勞務採購需求規格書_初稿.docx`;
+  options.onGenerated?.(blob, filename);
+  if (options.download !== false) saveAs(blob, filename);
 
   return {
     documentType: 'service-requirements',

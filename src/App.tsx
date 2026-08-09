@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { buildCrossDocumentConsistencyReport } from './consistency';
 import { deleteCase, listCases, upsertCase } from './db';
 import { exportCaseDocx, exportCaseJson } from './export';
 import { buildAllTemplateMappingPreviews } from './mapping';
@@ -73,6 +74,7 @@ export default function App() {
   const rules = useMemo(() => evaluateCase(current), [current]);
   const score = useMemo(() => completenessScore(current), [current]);
   const mappingPreviews = useMemo(() => buildAllTemplateMappingPreviews(current), [current]);
+  const preflight = useMemo(() => buildCrossDocumentConsistencyReport(current), [current]);
   const pricingItems = current.pricingItems ?? [];
   const internalEstimateTotal = useMemo(
     () => (current.pricingItems ?? []).reduce((sum, item) => sum + (pricingSubtotal(item) ?? 0), 0),
@@ -217,6 +219,22 @@ export default function App() {
       setTemplateWriteStatus(`標價清單 XLSX 初稿已產生，共 ${report.itemCount} 項。${pending}${warnings}`);
     } catch (error) {
       setTemplateWriteStatus(error instanceof Error ? error.message : '標價清單 XLSX 初稿產製失敗');
+    }
+  }
+
+  async function exportCompletePackage() {
+    if (!preflight.canPackage) {
+      setTemplateWriteStatus(`完整招標文件包尚未就緒：${preflight.blockers.length} 項阻擋。請先處理「系統警示」中的【禁止整包輸出】項目。`);
+      return;
+    }
+
+    setTemplateWriteStatus('Preflight 已通過，正在本機產製並打包完整招標文件…');
+    try {
+      const { exportCompleteServiceProcurementPackage } = await import('./package-writer');
+      const report = await exportCompleteServiceProcurementPackage(current);
+      setTemplateWriteStatus(`完整招標文件包已產生：${report.filename}，共 ${report.fileCount} 個檔案；另有 ${report.warnings.length} 項非阻擋提醒。`);
+    } catch (error) {
+      setTemplateWriteStatus(error instanceof Error ? error.message : '完整招標文件包產製失敗');
     }
   }
 
@@ -435,6 +453,23 @@ export default function App() {
               </>
             )}
             <button onClick={() => void exportPriceSchedule()}>產出標價清單 XLSX 初稿</button>
+            {current.category === 'service' && (
+              <button
+                className="package-primary"
+                disabled={!preflight.canPackage}
+                onClick={() => void exportCompletePackage()}
+                title={preflight.canPackage ? 'Preflight 已通過，可產生完整招標文件包' : `尚有 ${preflight.blockers.length} 項阻擋事項`}
+              >
+                一鍵下載完整招標文件包 ZIP
+              </button>
+            )}
+            {current.category === 'service' && (
+              <p className={`package-readiness ${preflight.canPackage ? 'ready' : 'blocked'}`}>
+                {preflight.canPackage
+                  ? `整包輸出就緒｜${preflight.warnings.length} 項非阻擋提醒`
+                  : `整包輸出未就緒｜${preflight.blockers.length} 項阻擋、${preflight.warnings.length} 項提醒`}
+              </p>
+            )}
             {templateWriteStatus && <p className="template-write-status">{templateWriteStatus}</p>}
           </div>
         </section>

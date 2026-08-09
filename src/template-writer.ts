@@ -17,6 +17,11 @@ export interface TemplateWriteReport {
   warnings: string[];
 }
 
+export interface TemplateWriterOptions {
+  download?: boolean;
+  onGenerated?: (blob: Blob, filename: string) => void;
+}
+
 function decodeXmlText(value: string) {
   return value
     .replace(/&lt;/g, '<')
@@ -138,7 +143,10 @@ function record(
   else if (missingAnchorWarning) report.warnings.push(`${label}：未在官方範本找到可安全寫入的 Anchor 或可勾選符號。`);
 }
 
-export async function exportTenderInstructionsDraft(procurementCase: ProcurementCase): Promise<TemplateWriteReport> {
+export async function exportTenderInstructionsDraft(
+  procurementCase: ProcurementCase,
+  options: TemplateWriterOptions = {},
+): Promise<TemplateWriteReport> {
   const context = buildCanonicalDocumentContext(procurementCase);
   const report: TemplateWriteReport = {
     templateId: 'tender-instructions',
@@ -239,7 +247,9 @@ export async function exportTenderInstructionsDraft(procurementCase: Procurement
     type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
   });
   const safeName = (procurementCase.title || '採購案件').replace(/[\\/:*?"<>|]/g, '_');
-  saveAs(blob, `${safeName}_投標須知_工程會${TENDER_TEMPLATE_VERSION}_初稿.docx`);
+  const filename = `${safeName}_投標須知_工程會${TENDER_TEMPLATE_VERSION}_初稿.docx`;
+  options.onGenerated?.(blob, filename);
+  if (options.download !== false) saveAs(blob, filename);
 
   if (report.pending.length) {
     report.warnings.push('本檔為初稿；未能 deterministic 對應的欄位仍保留官方原始選項，須人工確認。');
