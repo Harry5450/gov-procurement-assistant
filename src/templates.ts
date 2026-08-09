@@ -3,6 +3,7 @@ import type { TemplateRecord } from './types';
 export const OFFICIAL_TEMPLATE_INDEX_URL = 'https://www.pcc.gov.tw/content/index?eid=10146&lang=1&type=C';
 
 // Seed only. Production should refresh via PCC watcher and keep immutable historical versions.
+// Verified against the PCC official index on 2026-08-09.
 export const templateRegistry: TemplateRecord[] = [
   {
     id: 'tender-instructions',
@@ -24,7 +25,7 @@ export const templateRegistry: TemplateRecord[] = [
     id: 'goods-contract',
     name: '財物採購契約範本',
     category: 'goods',
-    officialDate: '114/12/31',
+    officialDate: '114/12/30',
     sourceUrl: OFFICIAL_TEMPLATE_INDEX_URL,
     status: 'active',
   },
