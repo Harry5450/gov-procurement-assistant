@@ -9,6 +9,7 @@ on:
     paths:
       - 'scripts/pcc-watcher.mjs'
       - 'scripts/pcc-assets.mjs'
+      - 'scripts/pcc-text.mjs'
       - '.github/workflows/pcc-template-watcher.yml'
       - 'package.json'
 
@@ -34,17 +35,20 @@ jobs:
       - name: Download and verify core official template files
         run: npm run pcc:assets
 
+      - name: Normalize official ODT content for human-readable review
+        run: npm run pcc:text
+
       - name: Detect official template changes
         id: diff
         shell: bash
         run: |
-          CHANGES="$(git status --porcelain -- src/data/pcc-template-index.json src/data/pcc-template-assets.json official-templates)"
+          CHANGES="$(git status --porcelain -- src/data/pcc-template-index.json src/data/pcc-template-assets.json src/data/pcc-template-text.json src/data/pcc-template-text official-templates)"
           if [ -z "$CHANGES" ]; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "No PCC template changes detected."
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
-            echo "PCC template assets or index changed:"
+            echo "PCC template assets, normalized text, or index changed:"
             echo "$CHANGES"
           fi
 
@@ -57,7 +61,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -B "$BRANCH"
-          git add src/data/pcc-template-index.json src/data/pcc-template-assets.json official-templates
+          git add src/data/pcc-template-index.json src/data/pcc-template-assets.json src/data/pcc-template-text.json src/data/pcc-template-text official-templates
           git commit -m "chore: refresh PCC official template assets"
           git push --force-with-lease origin "$BRANCH"
           echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
@@ -75,16 +79,19 @@ jobs:
 
           本 PR 可能包含：
           - 官方索引快照更新
-          - DOCX / ODT / PDF 官方檔案的新版本封存
+          - Word（DOCX 或 DOC）/ ODT / PDF 官方檔案的新版本封存
           - 每個檔案的 SHA-256、大小、原始下載 URL 與官方檔名
+          - 由 ODT deterministic extraction 產生的 normalized text
+          - `latest/*.txt` 的 Git diff，可直接閱讀新版與前一版的文字差異
 
           安全與版本規則：
           1. 官方檔案以 `official-templates/<template>/<ROC-version>/` 保存，歷史版本不覆寫。
           2. 同一版本若官方內容 SHA-256 發生漂移，Watcher 會直接失敗，要求人工調查。
-          3. 此 PR 仍是 candidate，不會自動更新 active Template Registry。
-          4. Watcher 只讀工程會公開網站，不接觸任何採購案件、IndexedDB 或機敏內容。
+          3. versioned normalized text 同樣 immutable；`latest/*.txt` 僅作為人工 review diff。
+          4. 此 PR 仍是 candidate，不會自動更新 active Template Registry。
+          5. Watcher 只讀工程會公開網站，不接觸任何採購案件、IndexedDB 或機敏內容。
 
-          請人工確認新版本與修正內容，再決定是否合併及升版 active Registry。
+          請人工確認新版本與文字差異，再決定是否合併及升版 active Registry。
           EOF
           )
 
