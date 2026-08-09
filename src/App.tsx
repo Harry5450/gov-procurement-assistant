@@ -3,6 +3,7 @@ import { deleteCase, listCases, upsertCase } from './db';
 import { exportCaseDocx, exportCaseJson } from './export';
 import { completenessScore, evaluateCase } from './rules';
 import { buildSanitizedAIContext } from './privacy';
+import { formatRocDate, getTemplateObservation, getTemplateSyncStatus, pccTemplateIndex } from './pcc';
 import { templateRegistry } from './templates';
 import type { ProcurementCase, ProcurementCategory, SecurityLevel } from './types';
 
@@ -39,6 +40,12 @@ const securityNames: Record<SecurityLevel, string> = {
   SENSITIVE: '敏感',
   RESTRICTED: '高度敏感',
 };
+
+const syncLabels = {
+  current: '已同步',
+  candidate: '有新版待確認',
+  untracked: '未追蹤',
+} as const;
 
 export default function App() {
   const [current, setCurrent] = useState<ProcurementCase>(newCase());
@@ -177,8 +184,23 @@ export default function App() {
 
           <div className="card">
             <h2>5. 工程會範本 Registry</h2>
-            <p className="muted">目前為官方日期種子資料；正式版將由 PCC Watcher 自動比對日期與 SHA-256，更新後先進入 candidate，不直接覆蓋 production。</p>
-            <div className="template-list">{applicableTemplates.map((item) => <div className="template-row" key={item.id}><span><strong>{item.name}</strong><small>工程會最近更新：{item.officialDate}</small></span><span className="tag">{item.status}</span></div>)}</div>
+            <p className="muted">PCC Watcher 只監測公開的工程會範本索引。偵測到日期不同時標示為 candidate，必須人工確認後才可更新 active 範本。</p>
+            <div className="template-list">
+              {applicableTemplates.map((item) => {
+                const observed = getTemplateObservation(item);
+                const syncStatus = getTemplateSyncStatus(item);
+                return (
+                  <div className="template-row" key={item.id}>
+                    <span>
+                      <strong>{item.name}</strong>
+                      <small>目前採用：{item.officialDate}{observed ? ` · 官方索引：${formatRocDate(observed.officialDate)}` : ''}</small>
+                    </span>
+                    <span className={`tag ${syncStatus}`}>{syncLabels[syncStatus]}</span>
+                  </div>
+                );
+              })}
+            </div>
+            <p className="registry-source">監測來源：<a href={pccTemplateIndex.sourceUrl} target="_blank" rel="noreferrer">工程會「招標相關文件及表格」</a></p>
           </div>
 
           <div className="actions card">
