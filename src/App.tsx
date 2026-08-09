@@ -3,7 +3,7 @@ import { deleteCase, listCases, upsertCase } from './db';
 import { exportCaseDocx, exportCaseJson } from './export';
 import { completenessScore, evaluateCase } from './rules';
 import { buildSanitizedAIContext } from './privacy';
-import { formatRocDate, getTemplateObservation, getTemplateSyncStatus, pccTemplateIndex } from './pcc';
+import { formatRocDate, getTemplateArchive, getTemplateObservation, getTemplateSyncStatus, pccTemplateIndex } from './pcc';
 import { templateRegistry } from './templates';
 import type { ProcurementCase, ProcurementCategory, SecurityLevel } from './types';
 
@@ -184,16 +184,18 @@ export default function App() {
 
           <div className="card">
             <h2>5. 工程會範本 Registry</h2>
-            <p className="muted">PCC Watcher 只監測公開的工程會範本索引。偵測到日期不同時標示為 candidate，必須人工確認後才可更新 active 範本。</p>
+            <p className="muted">PCC Watcher 會監測公開索引，並另外封存核心範本的 DOCX / ODT / PDF 與 SHA-256。偵測到新版時只建立 candidate，必須人工確認後才可更新 active 範本。</p>
             <div className="template-list">
               {applicableTemplates.map((item) => {
                 const observed = getTemplateObservation(item);
+                const archive = getTemplateArchive(item);
                 const syncStatus = getTemplateSyncStatus(item);
                 return (
                   <div className="template-row" key={item.id}>
                     <span>
                       <strong>{item.name}</strong>
                       <small>目前採用：{item.officialDate}{observed ? ` · 官方索引：${formatRocDate(observed.officialDate)}` : ''}</small>
+                      <small>{archive ? `檔案封存：${formatRocDate(archive.latestObservedVersion)} · ${archive.versions[0]?.files.length ?? 0} 種格式` : '檔案封存：尚未建立'}</small>
                     </span>
                     <span className={`tag ${syncStatus}`}>{syncLabels[syncStatus]}</span>
                   </div>
