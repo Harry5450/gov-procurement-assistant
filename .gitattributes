@@ -1,4 +1,5 @@
 official-templates/** binary
+*.doc binary
 *.docx binary
 *.odt binary
 *.pdf binary
