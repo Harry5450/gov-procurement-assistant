@@ -15,4 +15,5 @@ jobs:
         with:
           node-version: 22
       - run: npm install
+      - run: node --check scripts/pcc-watcher.mjs
       - run: npm run build

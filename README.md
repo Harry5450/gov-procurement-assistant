@@ -11,7 +11,7 @@ Local-first 的公務採購文件輔助系統。目標是讓一般承辦人從�
 3. **AI 預設關閉**：外部 AI Gateway 目前直接拒絕呼叫。
 4. **敏感資料不可外送**：底價、評選委員、議價、內部簽核等 RESTRICTED 資料硬性阻擋。
 5. **規則優先於 Prompt**：文件清單與檢核使用 deterministic TypeScript Rule Engine。
-6. **官方範本不可覆寫**：未來 PCC Watcher 下載新版後先進入 `candidate`，人工核准才可成為 `active`。
+6. **官方範本不可覆寫**：PCC Watcher 只產生 candidate；人工核准後才可更新 active Registry。
 7. **單一資料來源**：案件欄位以 `ProcurementCase` 為唯一資料來源，避免跨文件不一致。
 
 ## 已完成 MVP 功能
@@ -24,7 +24,10 @@ Local-first 的公務採購文件輔助系統。目標是讓一般承辦人從�
 - Security Level：PUBLIC / INTERNAL / SENSITIVE / RESTRICTED
 - Privacy Gateway 與敏感內容偵測
 - 預覽「若啟用 AI」實際可外送的去敏感內容
-- 工程會範本 Registry 種子資料
+- 工程會 active Template Registry
+- PCC 官方索引快照與版本日期比對
+- GitHub Actions 工作日自動檢查 PCC 索引
+- 發現更新時建立／刷新 candidate PR，不自動升版
 - 匯出案件 JSON 備份
 - 本機產生 DOCX 案件設定與文件檢核表
 - RWD 手機／桌面介面
@@ -43,17 +46,33 @@ npm run build
 npm run preview
 ```
 
+手動更新 PCC 官方索引：
+
+```bash
+npm run pcc:watch
+```
+
 ## 專案結構
 
 ```text
+.github/workflows/
+├── ci.yml                    # Build verification
+└── pcc-template-watcher.yml  # PCC 公開索引監測
+
+scripts/
+└── pcc-watcher.mjs           # 抓取與解析工程會官方索引
+
 src/
-├── App.tsx          # MVP workflow / UI
-├── db.ts            # IndexedDB / Dexie
-├── export.ts        # 本機 DOCX / JSON 匯出
-├── privacy.ts       # DLP / AI Gateway policy
-├── rules.ts         # deterministic procurement rules
-├── templates.ts     # PCC template registry seed
-├── types.ts         # ProcurementCase schema
+├── data/
+│   └── pcc-template-index.json # 最近確認的 PCC 公開索引快照
+├── App.tsx
+├── db.ts
+├── export.ts
+├── pcc.ts                    # active Registry 與官方索引比對
+├── privacy.ts
+├── rules.ts
+├── templates.ts              # 人工核准的 active Registry
+├── types.ts
 ├── main.tsx
 └── styles.css
 ```
@@ -71,37 +90,51 @@ ProcurementCase (single source of truth)
   ├─ Document Export（本機）
   └─ Privacy Gateway
        └─ External LLM（預設關閉，只允許 SanitizedAIContext）
+
+工程會公開網站
+  ↓
+PCC Watcher（GitHub Actions；不接觸案件資料）
+  ↓
+官方索引 Snapshot
+  ↓
+若日期異動 → candidate PR
+  ↓
+人工確認
+  ↓
+active Template Registry
 ```
 
-## PCC Template Watcher 規劃
+## PCC Template Watcher
 
-正式版會建立獨立 `pcc-template-sync` 模組：
+目前已完成「索引監測層」：
 
 ```text
 工程會官方清單
    ↓
 抓取文件名稱＋最近更新日期
    ↓
-下載官方檔案
+Parser safety check
    ↓
-SHA-256 比對
+與 Repo Snapshot 比對
    ↓
-candidate version
+無變更 → 結束
+有變更 → automation/pcc-template-update
    ↓
-舊版／新版 Diff
+candidate PR
    ↓
-管理者核准
-   ↓
-active
+人工確認
 ```
 
-每一份正式產出文件都必須記錄使用的官方範本版本，不覆蓋歷史版本。
+Watcher 每週一至週五自動執行，也可從 GitHub Actions 手動執行。它只讀取工程會公開資料，不讀取 IndexedDB、案件內容或任何機敏資料。
+
+下一層仍需完成：官方 DOCX/ODT/PDF 下載、SHA-256、歷史版本保存、文件內容 Diff 與 active 升版流程。
 
 ## 下一階段 TODO
 
 ### Phase 1 — 完成一般勞務 Happy Path
-- [ ] 正式 PCC Template Watcher
+- [x] PCC 官方索引監測與 candidate PR
 - [ ] 下載並版本化官方 DOCX/ODT/PDF
+- [ ] SHA-256 與舊版／新版 Diff
 - [ ] 官方範本欄位 mapping
 - [ ] 產出真正的投標須知初稿
 - [ ] 產出勞務採購契約初稿
@@ -135,6 +168,7 @@ active
 - `reservePrice`、`internalNotes` 永遠不得進入 AI context。
 - SENSITIVE / RESTRICTED 案件預設禁止外部 AI。
 - 工程會官方範本版本必須 immutable。
+- PCC Watcher 只能更新公開索引 Snapshot，不能自動修改 active Registry。
 
 ## 官方來源
 

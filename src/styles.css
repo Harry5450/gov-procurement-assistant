@@ -11,6 +11,7 @@ button, input, select, textarea { font: inherit; }
 button { cursor: pointer; border: 0; border-radius: 10px; padding: 10px 14px; background: #1f5eff; color: white; font-weight: 700; }
 button.secondary { background: #edf2ff; color: #244078; }
 button.danger-link { background: transparent; color: #a63232; padding: 4px 0; font-size: 12px; }
+a { color: #2457b8; }
 
 .app-shell { min-height: 100vh; }
 .topbar { display: flex; justify-content: space-between; gap: 20px; align-items: flex-start; padding: 30px clamp(18px, 4vw, 56px); background: white; border-bottom: 1px solid #dde3ed; }
@@ -58,7 +59,11 @@ li { margin-bottom: 7px; }
 .template-row { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 12px 0; border-bottom: 1px solid #edf0f5; }
 .template-row span:first-child { display: grid; gap: 3px; }
 .template-row small { color: #77849a; }
-.tag { background: #edf4ff; color: #325b9e; border-radius: 999px; padding: 5px 9px; font-size: 12px; font-weight: 800; }
+.tag { background: #edf4ff; color: #325b9e; border-radius: 999px; padding: 5px 9px; font-size: 12px; font-weight: 800; white-space: nowrap; }
+.tag.current { background: #e9f7ef; color: #1c6b42; }
+.tag.candidate { background: #fff4da; color: #875c05; }
+.tag.untracked { background: #f1f3f6; color: #667085; }
+.registry-source { margin: 14px 0 0; font-size: 12px; color: #77849a; }
 .actions { display: flex; gap: 10px; flex-wrap: wrap; }
 
 @media (max-width: 900px) {
@@ -73,4 +78,5 @@ li { margin-bottom: 7px; }
   .topbar, .layout { padding-left: 14px; padding-right: 14px; }
   .card { padding: 16px; border-radius: 13px; }
   .privacy-badge { white-space: normal; }
+  .template-row { align-items: flex-start; }
 }
