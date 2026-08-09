@@ -58,13 +58,21 @@ function present(label: string, value: string, pending: string[]) {
   return '【待機關填列】';
 }
 
+function outwardConsistencyWarnings(procurementCase: ProcurementCase) {
+  return validateCanonicalConsistency(procurementCase).filter((warning) =>
+    !warning.includes('底價／預估底價')
+    && !warning.includes('標價項目僅部分填有')
+    && !warning.includes('標價清單內部預估合計'),
+  );
+}
+
 export function buildServiceRequirementsModel(procurementCase: ProcurementCase): ServiceRequirementsModel {
   if (procurementCase.category !== 'service') {
     throw new Error('需求規格書 Writer 目前只適用於採購類型為「勞務」的案件。');
   }
 
   const pending: string[] = [];
-  const warnings = validateCanonicalConsistency(procurementCase);
+  const warnings = outwardConsistencyWarnings(procurementCase);
   const agency = present('機關名稱', safeText(procurementCase.agency), pending);
   const title = present('標案名稱', safeText(procurementCase.title), pending);
   const budget = present('預算金額', money(procurementCase.budget), pending);
