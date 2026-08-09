@@ -7,7 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "pcc:watch": "node scripts/pcc-watcher.mjs"
+    "pcc:watch": "node scripts/pcc-watcher.mjs",
+    "pcc:assets": "node scripts/pcc-assets.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
