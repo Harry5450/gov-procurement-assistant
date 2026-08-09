@@ -17,6 +17,11 @@ export interface ServiceContractWriteReport {
   warnings: string[];
 }
 
+export interface ServiceContractWriterOptions {
+  download?: boolean;
+  onGenerated?: (blob: Blob, filename: string) => void;
+}
+
 function decodeXmlText(value: string) {
   return value
     .replace(/&lt;/g, '<')
@@ -152,7 +157,10 @@ function buildServiceScope(procurementCase: ProcurementCase) {
   return parts.join('；');
 }
 
-export async function exportServiceContractDraft(procurementCase: ProcurementCase): Promise<ServiceContractWriteReport> {
+export async function exportServiceContractDraft(
+  procurementCase: ProcurementCase,
+  options: ServiceContractWriterOptions = {},
+): Promise<ServiceContractWriteReport> {
   if (procurementCase.category !== 'service') {
     throw new Error('勞務採購契約 Writer 只適用於採購類型為「勞務」的案件。');
   }
@@ -253,7 +261,9 @@ export async function exportServiceContractDraft(procurementCase: ProcurementCas
   const output = zipSync(outputEntries, { level: 6 });
   const blob = new Blob([output], { type: 'application/vnd.oasis.opendocument.text' });
   const safeName = (procurementCase.title || '採購案件').replace(/[\\/:*?"<>|]/g, '_');
-  saveAs(blob, `${safeName}_勞務採購契約_工程會${SERVICE_TEMPLATE_VERSION}_初稿.odt`);
+  const filename = `${safeName}_勞務採購契約_工程會${SERVICE_TEMPLATE_VERSION}_初稿.odt`;
+  options.onGenerated?.(blob, filename);
+  if (options.download !== false) saveAs(blob, filename);
 
   if (report.pending.length) {
     report.warnings.push('本檔為初稿；未能 deterministic 對應的條款與選項仍須人工確認。');
