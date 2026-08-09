@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "sourceAssetManifest": "src/data/pcc-template-assets.json",
+  "templates": [
+    {
+      "id": "tender-instructions",
+      "name": "投標須知範本",
+      "latestVersion": "1150727",
+      "latestTextPath": "src/data/pcc-template-text/latest/tender-instructions.txt",
+      "latestTextSha256": "dd30cbf7f82d9aee516514c7b88230b5f9b5eafc3e4692d94b7241d9cffe2103",
+      "versions": [
+        {
+          "version": "1150727",
+          "textPath": "src/data/pcc-template-text/versions/tender-instructions/1150727.txt",
+          "textSha256": "dd30cbf7f82d9aee516514c7b88230b5f9b5eafc3e4692d94b7241d9cffe2103",
+          "lineCount": 451,
+          "sourceOdtPath": "official-templates/tender-instructions/1150727/tender-instructions.odt",
+          "sourceOdtSha256": "e99e6b107abf36a8ebb3dc72c567b5d57b6d86317279042572b9ee92d7577123"
+        }
+      ]
+    },
+    {
+      "id": "construction-contract",
+      "name": "工程採購契約範本",
+      "latestVersion": "1141230",
+      "latestTextPath": "src/data/pcc-template-text/latest/construction-contract.txt",
+      "latestTextSha256": "e67e105d1b5089a5aa2d064c0959b8233e96c72917ff0e12b2f74768fec78dc9",
+      "versions": [
+        {
+          "version": "1141230",
+          "textPath": "src/data/pcc-template-text/versions/construction-contract/1141230.txt",
+          "textSha256": "e67e105d1b5089a5aa2d064c0959b8233e96c72917ff0e12b2f74768fec78dc9",
+          "lineCount": 1091,
+          "sourceOdtPath": "official-templates/construction-contract/1141230/construction-contract.odt",
+          "sourceOdtSha256": "f59ce23c9e161c657dff8510aa1860302b7434412698843a75c08d90b4974d2c"
+        }
+      ]
+    },
+    {
+      "id": "goods-contract",
+      "name": "財物採購契約範本",
+      "latestVersion": "1141230",
+      "latestTextPath": "src/data/pcc-template-text/latest/goods-contract.txt",
+      "latestTextSha256": "6a3307df535eef36513d836a7c82a22e5f9cdcffa3c7651c51f4be046a1c26d7",
+      "versions": [
+        {
+          "version": "1141230",
+          "textPath": "src/data/pcc-template-text/versions/goods-contract/1141230.txt",
+          "textSha256": "6a3307df535eef36513d836a7c82a22e5f9cdcffa3c7651c51f4be046a1c26d7",
+          "lineCount": 560,
+          "sourceOdtPath": "official-templates/goods-contract/1141230/goods-contract.odt",
+          "sourceOdtSha256": "9cfd24702b79756e1405317d522d6abc3c950f924ffcf260a38ce854f10dae84"
+        }
+      ]
+    },
+    {
+      "id": "service-contract",
+      "name": "勞務採購契約範本",
+      "latestVersion": "1141231",
+      "latestTextPath": "src/data/pcc-template-text/latest/service-contract.txt",
+      "latestTextSha256": "b975ae44f8b1a103aa9b7272aab6c3fcec9fe4a9923d506266da66ca018647f0",
+      "versions": [
+        {
+          "version": "1141231",
+          "textPath": "src/data/pcc-template-text/versions/service-contract/1141231.txt",
+          "textSha256": "b975ae44f8b1a103aa9b7272aab6c3fcec9fe4a9923d506266da66ca018647f0",
+          "lineCount": 714,
+          "sourceOdtPath": "official-templates/service-contract/1141231/service-contract.odt",
+          "sourceOdtSha256": "013b21ab1bce0bc987ccd236151d3257aab55366d9234622fa0da8e0ec132421"
+        }
+      ]
+    }
+  ]
+}
