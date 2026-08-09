@@ -16,6 +16,7 @@
     "@vitejs/plugin-react": "latest",
     "dexie": "latest",
     "docx": "latest",
+    "exceljs": "4.4.0",
     "fflate": "latest",
     "file-saver": "latest",
     "vite": "latest",
