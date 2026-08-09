@@ -15,7 +15,7 @@ interface OfficialTemplateIndex {
 }
 
 export interface ArchivedTemplateFile {
-  format: 'docx' | 'odt' | 'pdf';
+  format: 'doc' | 'docx' | 'odt' | 'pdf';
   path: string;
   sha256: string;
   size: number;
