@@ -10,10 +10,10 @@ Local-first 的公務採購文件輔助系統。目標是讓一般承辦人從�
 2. **Server 不保存案件內容**：MVP 無案件後端資料庫。
 3. **AI 預設關閉**：外部 AI Gateway 目前直接拒絕呼叫。
 4. **敏感資料不可外送**：底價、評選委員、議價、內部簽核等 RESTRICTED 資料硬性阻擋。
-5. **規則優先於 Prompt**：文件清單與檢核使用 deterministic TypeScript Rule Engine。
+5. **規則優先於 Prompt**：文件清單、版本比對、Mapping 與檢核均採 deterministic workflow。
 6. **官方範本不可覆寫**：PCC Watcher 只產生 candidate；人工核准後才可更新 active Registry。
 7. **官方檔案不可靜默漂移**：同一 ROC 版本若 SHA-256 改變，Watcher 直接失敗並要求人工調查。
-8. **單一資料來源**：案件欄位以 `ProcurementCase` 為唯一資料來源，避免跨文件不一致。
+8. **單一資料來源**：案件欄位以 `ProcurementCase` 為唯一資料來源，所有文件 mapping 都由同一份 canonical context 產生。
 
 ## 已完成 MVP 功能
 
@@ -28,12 +28,17 @@ Local-first 的公務採購文件輔助系統。目標是讓一般承辦人從�
 - 工程會 active Template Registry
 - PCC 官方索引快照與版本日期比對
 - PCC 核心範本 detail page 解析
-- 核心範本 DOCX / ODT / PDF 自動下載與檔案簽章驗證
+- 核心範本 Word（DOCX/DOC）/ ODT / PDF 自動下載與檔案簽章驗證
 - SHA-256 manifest 與 immutable 歷史版本目錄
-- GitHub Actions 工作日自動檢查 PCC 索引與官方檔案
+- ODT canonical text 正規化與 human-readable Git Diff baseline
+- GitHub Actions 工作日自動檢查 PCC 索引、官方檔案與 normalized text
 - 發現更新時建立／刷新 candidate PR，不自動升版
+- Canonical Template Field Mapping Engine
+- 投標須知與各採購契約的 mapping coverage 預覽
+- 招標方式、決標原則、決標方式、押標金、履約保證金、契約價金計算方式等跨文件共用欄位
+- 基本 Cross-document consistency check
 - 匯出案件 JSON 備份
-- 本機產生 DOCX 案件設定與文件檢核表
+- 本機產生 DOCX 案件設定、文件檢核與 Mapping audit
 - RWD 手機／桌面介面
 
 ## 開始使用
@@ -50,148 +55,127 @@ npm run build
 npm run preview
 ```
 
-手動更新 PCC 官方索引：
+更新 PCC 資料：
 
 ```bash
 npm run pcc:watch
-```
-
-下載與驗證核心官方範本：
-
-```bash
 npm run pcc:assets
+npm run pcc:text
 ```
 
-只驗證、不寫入檔案：
+只驗證 normalized text、不寫入檔案：
 
 ```bash
-npm run pcc:assets -- --dry-run
+npm run pcc:text -- --dry-run
 ```
 
 ## 專案結構
 
 ```text
 .github/workflows/
-├── ci.yml                    # Build / watcher syntax verification
-└── pcc-template-watcher.yml  # PCC 公開索引＋官方檔案監測
+├── ci.yml                    # Build / watcher / text parser verification
+└── pcc-template-watcher.yml  # PCC 索引＋官方檔案＋normalized text 監測
 
 scripts/
 ├── pcc-watcher.mjs           # 抓取索引、文件名稱、日期、detail URL
-└── pcc-assets.mjs            # 下載核心範本、驗證格式、SHA-256、immutable archive
+├── pcc-assets.mjs            # 下載核心範本、驗證格式、SHA-256、immutable archive
+└── pcc-text.mjs              # ODT content.xml → canonical normalized text
 
 official-templates/
 └── <template-id>/
     └── <ROC-version>/
-        ├── <template-id>.docx
+        ├── <template-id>.docx 或 .doc
         ├── <template-id>.odt
         └── <template-id>.pdf
 
 src/
 ├── data/
-│   ├── pcc-template-index.json   # 最近確認的 PCC 公開索引快照
-│   └── pcc-template-assets.json  # 官方檔案 hash / path / URL manifest
+│   ├── pcc-template-index.json
+│   ├── pcc-template-assets.json
+│   ├── pcc-template-text.json
+│   └── pcc-template-text/
+│       ├── latest/           # 供 GitHub PR 顯示新舊文字 diff
+│       └── versions/         # immutable normalized text history
 ├── App.tsx
 ├── db.ts
 ├── export.ts
-├── pcc.ts                        # active Registry、索引、archive manifest 比對
+├── mapping.ts                # ProcurementCase → 官方範本欄位 mapping
+├── pcc.ts
 ├── privacy.ts
 ├── rules.ts
-├── templates.ts                  # 人工核准的 active Registry
+├── templates.ts
 ├── types.ts
 ├── main.tsx
 └── styles.css
 ```
 
-## 資料流
+## 案件與文件資料流
 
 ```text
-使用者
-  ↓
-React Web App
+使用者只填一次
   ↓
 ProcurementCase (single source of truth)
-  ├─ IndexedDB（本機）
-  ├─ Rule Engine（0 token）
-  ├─ Document Export（本機）
-  └─ Privacy Gateway
-       └─ External LLM（預設關閉，只允許 SanitizedAIContext）
-
-工程會公開網站
   ↓
-PCC Index Watcher
+Canonical Document Context
+  ├─ 投標須知 Mapping
+  ├─ 勞務契約 Mapping
+  ├─ 財物契約 Mapping
+  ├─ 工程契約 Mapping
+  └─ Cross-document consistency check
   ↓
-文件 detail page
+Mapping coverage / 缺漏欄位
   ↓
-DOCX / ODT / PDF
-  ↓
-格式簽章驗證 + SHA-256
-  ↓
-official-templates/<id>/<ROC-version>/
-  ↓
-manifest
-  ↓
-若有新增／變更 → candidate PR
-  ↓
-人工確認
-  ↓
-active Template Registry
+後續 Template Writer 寫入官方範本
 ```
+
+Mapping Engine 目前只負責「欄位來源、目標欄位、官方文字 Anchor、必要性與完整度」，不會自動替承辦人決定法定招標方式、決標原則或保證金設定。這些欄位由承辦人輸入後，系統負責讓所有文件使用同一個值。
 
 ## PCC Template Watcher
 
-目前包含兩層：
-
-### 1. 索引監測層
-
 ```text
-工程會官方清單
+工程會官方索引
    ↓
-抓取文件名稱＋最近更新日期＋detail URL
+detail page
    ↓
-Parser safety check
+Word / ODT / PDF
    ↓
-Repo Snapshot
-```
-
-### 2. 官方檔案封存層
-
-```text
-核心範本 detail page
+signature validation + SHA-256
    ↓
-辨識最新正式範本版本
+immutable archive
    ↓
-下載 DOCX / ODT / PDF
+ODT content.xml
    ↓
-檔案 signature validation
+normalized text
    ↓
-SHA-256
-   ↓
-若版本不存在 → 新增 immutable 版本目錄
-若同版本 hash 不同 → FAIL，禁止自動覆寫
+Git Diff
    ↓
 candidate PR
+   ↓
+人工確認
+   ↓
+active Template Registry
 ```
 
-Watcher 每週一至週五自動執行，也可從 GitHub Actions 手動執行。當 watcher 程式或 workflow 合併到 `main` 時也會執行一次初始化檢查。它只讀取工程會公開資料，不讀取 IndexedDB、案件內容或任何機敏資料。
-
-目前先封存 4 個核心範本：投標須知、工程採購契約、財物採購契約、勞務採購契約。後續可擴充其他工程會範本。
+Watcher 每週一至週五自動執行，也可從 GitHub Actions 手動執行。它只讀取工程會公開資料，不讀取 IndexedDB、案件內容或任何機敏資料。
 
 ## 下一階段 TODO
 
 ### Phase 1 — 完成一般勞務 Happy Path
 - [x] PCC 官方索引監測與 candidate PR
-- [x] 下載並版本化核心官方 DOCX/ODT/PDF
+- [x] 下載並版本化核心官方 Word/ODT/PDF
 - [x] SHA-256 immutable manifest
-- [ ] 舊版／新版文件內容 Diff
-- [ ] 官方範本欄位 mapping
+- [x] 舊版／新版 human-readable 文件內容 Diff pipeline
+- [x] 官方範本欄位 Mapping Engine
+- [x] 基本 Cross-document consistency checker
+- [ ] Anchor Resolver：將 Mapping 定位到實際 DOCX/ODT XML 節點
 - [ ] 產出真正的投標須知初稿
 - [ ] 產出勞務採購契約初稿
 - [ ] 需求規格書產生器
 - [ ] 標價清單 XLSX
-- [ ] Cross-document consistency checker
+- [ ] 完整跨文件一致性驗證
 
 ### Phase 2 — 財物採購
-- [ ] 財物契約 mapping
+- [ ] 財物契約實際欄位寫入
 - [ ] 規格對照表
 - [ ] 驗收與保固規則
 
@@ -218,6 +202,7 @@ Watcher 每週一至週五自動執行，也可從 GitHub Actions 手動執行�
 - 工程會官方範本版本必須 immutable。
 - PCC Watcher 只能建立 candidate 更新，不能自動修改 active Registry。
 - 同一官方版本若內容 hash 發生漂移，必須人工調查，不可自動接受。
+- Mapping Engine 不得自行推定招標方式、決標原則、押標金或履約保證金等需承辦判斷之欄位。
 
 ## 官方來源
 
