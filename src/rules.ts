@@ -1,3 +1,4 @@
+import { buildCrossDocumentConsistencyReport } from './consistency';
 import { validateCanonicalConsistency } from './mapping';
 import type { ProcurementCase, RuleResult } from './types';
 
@@ -43,7 +44,24 @@ export function evaluateCase(procurementCase: ProcurementCase): RuleResult {
   if (procurementCase.reservePrice !== undefined) warnings.push('偵測到底價／預估底價欄位：此資料屬 RESTRICTED，不得送往外部 LLM。');
   warnings.push(...validateCanonicalConsistency(procurementCase));
 
-  return { requiredDocuments, optionalDocuments, confirmations, warnings };
+  if (procurementCase.category === 'service') {
+    const preflight = buildCrossDocumentConsistencyReport(procurementCase);
+    warnings.push(
+      ...preflight.blockers.map((item) => `【禁止整包輸出】${item.label}：${item.message}`),
+      ...preflight.warnings.map((item) => `【跨文件一致性】${item.label}：${item.message}`),
+    );
+
+    if (!preflight.canPackage) {
+      confirmations.push(`完整招標文件包尚未就緒：${preflight.blockers.length} 項阻擋、${preflight.warnings.length} 項提醒。`);
+    }
+  }
+
+  return {
+    requiredDocuments,
+    optionalDocuments,
+    confirmations: [...new Set(confirmations)],
+    warnings: [...new Set(warnings)],
+  };
 }
 
 export function completenessScore(procurementCase: ProcurementCase): number {
