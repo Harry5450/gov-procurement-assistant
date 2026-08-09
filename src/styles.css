@@ -68,7 +68,8 @@ li { margin-bottom: 7px; }
 .tag.candidate { background: #fff4da; color: #875c05; }
 .tag.untracked { background: #f1f3f6; color: #667085; }
 .registry-source { margin: 14px 0 0; font-size: 12px; color: #77849a; }
-.actions { display: flex; gap: 10px; flex-wrap: wrap; }
+.actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.template-write-status { flex-basis: 100%; margin: 4px 0 0; padding: 12px 14px; border-radius: 10px; background: #f5f8ff; color: #334f86; font-size: 13px; line-height: 1.6; }
 
 @media (max-width: 900px) {
   .topbar { flex-direction: column; }
