@@ -71,11 +71,32 @@ li { margin-bottom: 7px; }
 .actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
 .template-write-status { flex-basis: 100%; margin: 4px 0 0; padding: 12px 14px; border-radius: 10px; background: #f5f8ff; color: #334f86; font-size: 13px; line-height: 1.6; }
 
+.pricing-section { margin-top: 20px; padding-top: 18px; border-top: 1px solid #e8edf4; }
+.pricing-heading { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
+.pricing-heading h3 { margin-top: 0; }
+.pricing-heading p { margin: 0; max-width: 760px; font-size: 13px; line-height: 1.6; }
+.pricing-toolbar { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.pricing-table { margin-top: 16px; overflow-x: auto; border: 1px solid #dfe5ef; border-radius: 12px; }
+.pricing-grid { min-width: 920px; display: grid; grid-template-columns: 48px minmax(240px, 1.7fr) 100px 100px 150px 150px 64px; gap: 8px; align-items: center; padding: 9px 10px; }
+.pricing-header { background: #f3f6fa; color: #526079; font-size: 12px; font-weight: 800; border-bottom: 1px solid #dfe5ef; }
+.pricing-row + .pricing-row { border-top: 1px solid #edf0f5; }
+.pricing-row input { margin: 0; min-width: 0; padding: 9px 10px; }
+.pricing-index { text-align: center; color: #77849a; font-weight: 800; }
+.pricing-subtotal { text-align: right; font-size: 13px; }
+.pricing-summary { display: flex; gap: 10px 16px; align-items: baseline; justify-content: flex-end; flex-wrap: wrap; padding: 13px 4px 0; }
+.pricing-summary > span { color: #6b778c; font-size: 13px; }
+.pricing-summary > strong { font-size: 18px; }
+.pricing-summary small { flex-basis: 100%; text-align: right; font-weight: 700; }
+.pricing-ok { color: #267249; }
+.pricing-warning { color: #9c6b20; }
+
 @media (max-width: 900px) {
   .topbar { flex-direction: column; }
   .layout { grid-template-columns: 1fr; }
   .sidebar { position: static; }
   .progress-card { grid-template-columns: 1fr; }
+  .pricing-heading { flex-direction: column; }
+  .pricing-toolbar { justify-content: flex-start; }
 }
 
 @media (max-width: 620px) {
@@ -85,4 +106,8 @@ li { margin-bottom: 7px; }
   .privacy-badge { white-space: normal; }
   .template-row { align-items: flex-start; }
   .mapping-block { padding-left: 11px; padding-right: 11px; }
+  .pricing-toolbar { width: 100%; }
+  .pricing-toolbar button { flex: 1 1 180px; }
+  .pricing-summary { justify-content: flex-start; }
+  .pricing-summary small { text-align: left; }
 }

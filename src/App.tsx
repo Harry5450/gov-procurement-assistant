@@ -9,7 +9,7 @@ import { templateRegistry } from './templates';
 import { exportTenderInstructionsDraft } from './template-writer';
 import { exportServiceContractDraft } from './service-contract-writer';
 import { exportServiceRequirementsDraft } from './requirements-writer';
-import type { ProcurementCase, ProcurementCategory, SecurityLevel } from './types';
+import type { PricingItem, ProcurementCase, ProcurementCategory, SecurityLevel } from './types';
 
 function newCase(): ProcurementCase {
   const now = new Date().toISOString();
@@ -23,6 +23,7 @@ function newCase(): ProcurementCase {
     paymentTerms: '',
     acceptanceMethod: '',
     deliverables: [],
+    pricingItems: [],
     vendorQualification: '',
     procurementMethod: '',
     awardPrinciple: '',
@@ -57,6 +58,11 @@ const syncLabels = {
   untracked: '未追蹤',
 } as const;
 
+function pricingSubtotal(item: PricingItem) {
+  if (item.quantity === undefined || item.estimatedUnitPrice === undefined) return undefined;
+  return item.quantity * item.estimatedUnitPrice;
+}
+
 export default function App() {
   const [current, setCurrent] = useState<ProcurementCase>(newCase());
   const [cases, setCases] = useState<ProcurementCase[]>([]);
@@ -67,6 +73,11 @@ export default function App() {
   const rules = useMemo(() => evaluateCase(current), [current]);
   const score = useMemo(() => completenessScore(current), [current]);
   const mappingPreviews = useMemo(() => buildAllTemplateMappingPreviews(current), [current]);
+  const pricingItems = current.pricingItems ?? [];
+  const internalEstimateTotal = useMemo(
+    () => (current.pricingItems ?? []).reduce((sum, item) => sum + (pricingSubtotal(item) ?? 0), 0),
+    [current.pricingItems],
+  );
 
   async function refresh() {
     setCases(await listCases());
@@ -80,6 +91,60 @@ export default function App() {
     setSaved(false);
     setTemplateWriteStatus('');
     setCurrent((prev) => ({ ...prev, [key]: value, updatedAt: new Date().toISOString() }));
+  }
+
+  function patchPricingItem(id: string, values: Partial<PricingItem>) {
+    setSaved(false);
+    setTemplateWriteStatus('');
+    setCurrent((prev) => ({
+      ...prev,
+      pricingItems: (prev.pricingItems ?? []).map((item) => (item.id === id ? { ...item, ...values } : item)),
+      updatedAt: new Date().toISOString(),
+    }));
+  }
+
+  function addPricingItem(description = '') {
+    setSaved(false);
+    setTemplateWriteStatus('');
+    setCurrent((prev) => ({
+      ...prev,
+      pricingItems: [
+        ...(prev.pricingItems ?? []),
+        { id: crypto.randomUUID(), description },
+      ],
+      updatedAt: new Date().toISOString(),
+    }));
+  }
+
+  function removePricingItem(id: string) {
+    setSaved(false);
+    setTemplateWriteStatus('');
+    setCurrent((prev) => ({
+      ...prev,
+      pricingItems: (prev.pricingItems ?? []).filter((item) => item.id !== id),
+      updatedAt: new Date().toISOString(),
+    }));
+  }
+
+  function syncDeliverablesToPricing() {
+    const existing = new Set(pricingItems.map((item) => item.description.trim()).filter(Boolean));
+    const additions = current.deliverables
+      .map((description) => description.trim())
+      .filter((description) => description && !existing.has(description))
+      .map((description) => ({ id: crypto.randomUUID(), description }));
+
+    if (!additions.length) {
+      setTemplateWriteStatus(current.deliverables.length ? '主要交付成果都已存在於標價項目。' : '目前沒有主要交付成果可建立標價項目。');
+      return;
+    }
+
+    setSaved(false);
+    setTemplateWriteStatus(`已由主要交付成果新增 ${additions.length} 個標價項目；數量、單位與內部預估單價仍須人工填列。`);
+    setCurrent((prev) => ({
+      ...prev,
+      pricingItems: [...(prev.pricingItems ?? []), ...additions],
+      updatedAt: new Date().toISOString(),
+    }));
   }
 
   async function save() {
@@ -139,6 +204,19 @@ export default function App() {
       setTemplateWriteStatus(`勞務採購需求規格書 DOCX 初稿已產生。${applied}${pending}${warnings}`);
     } catch (error) {
       setTemplateWriteStatus(error instanceof Error ? error.message : '需求規格書初稿產製失敗');
+    }
+  }
+
+  async function exportPriceSchedule() {
+    setTemplateWriteStatus('正在產製標價清單 XLSX 初稿…');
+    try {
+      const { exportPriceScheduleXlsx } = await import('./price-schedule-writer');
+      const report = await exportPriceScheduleXlsx(current);
+      const pending = report.pending.length ? `待補：${report.pending.join('、')}。` : '數量與單位已填列。';
+      const warnings = report.warnings.length ? ` ${report.warnings.join(' ')}` : '';
+      setTemplateWriteStatus(`標價清單 XLSX 初稿已產生，共 ${report.itemCount} 項。${pending}${warnings}`);
+    } catch (error) {
+      setTemplateWriteStatus(error instanceof Error ? error.message : '標價清單 XLSX 初稿產製失敗');
     }
   }
 
@@ -224,6 +302,58 @@ export default function App() {
             </div>
             <label>廠商資格<textarea rows={3} value={current.vendorQualification} onChange={(e) => patch('vendorQualification', e.target.value)} placeholder="尚未確認可先留白，系統會列入人工確認。" /></label>
             <label>主要交付成果<textarea rows={3} value={current.deliverables.join('\n')} onChange={(e) => patch('deliverables', e.target.value.split('\n').map((v) => v.trim()).filter(Boolean))} placeholder={'每行一項，例如：\n每月維護報告\n系統備份紀錄'} /></label>
+
+            <div className="pricing-section">
+              <div className="pricing-heading">
+                <div>
+                  <h3>標價清單工作項目</h3>
+                  <p className="muted">可由交付成果建立項目，但系統不會自行猜測數量、單位或價格。預估單價屬內部試算，對外 XLSX 不會帶出。</p>
+                </div>
+                <div className="pricing-toolbar">
+                  <button className="secondary" onClick={syncDeliverablesToPricing}>從交付成果建立</button>
+                  <button className="secondary" onClick={() => addPricingItem()}>＋ 新增項目</button>
+                </div>
+              </div>
+
+              {pricingItems.length ? (
+                <>
+                  <div className="pricing-table">
+                    <div className="pricing-grid pricing-header" aria-hidden="true">
+                      <span>#</span><span>工作項目</span><span>數量</span><span>單位</span><span>預估單價（內部）</span><span>預估複價</span><span></span>
+                    </div>
+                    {pricingItems.map((item, index) => {
+                      const subtotal = pricingSubtotal(item);
+                      return (
+                        <div className="pricing-grid pricing-row" key={item.id}>
+                          <span className="pricing-index">{index + 1}</span>
+                          <input aria-label={`第 ${index + 1} 項工作項目`} value={item.description} onChange={(e) => patchPricingItem(item.id, { description: e.target.value })} placeholder="工作項目／交付成果" />
+                          <input aria-label={`第 ${index + 1} 項數量`} type="number" min="0" step="any" value={item.quantity ?? ''} onChange={(e) => patchPricingItem(item.id, { quantity: e.target.value === '' ? undefined : Number(e.target.value) })} placeholder="數量" />
+                          <input aria-label={`第 ${index + 1} 項單位`} value={item.unit ?? ''} onChange={(e) => patchPricingItem(item.id, { unit: e.target.value })} placeholder="式／月／件" />
+                          <input aria-label={`第 ${index + 1} 項內部預估單價`} type="number" min="0" step="1" value={item.estimatedUnitPrice ?? ''} onChange={(e) => patchPricingItem(item.id, { estimatedUnitPrice: e.target.value === '' ? undefined : Number(e.target.value) })} placeholder="僅供內部試算" />
+                          <strong className="pricing-subtotal">{subtotal === undefined ? '—' : `NT$ ${Math.round(subtotal).toLocaleString('zh-TW')}`}</strong>
+                          <button className="danger-link" onClick={() => removePricingItem(item.id)}>刪除</button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="pricing-summary">
+                    <span>內部預估合計（已填項目）</span>
+                    <strong>NT$ {Math.round(internalEstimateTotal).toLocaleString('zh-TW')}</strong>
+                    {current.budget > 0 && internalEstimateTotal > 0 && (
+                      <small className={Math.abs(current.budget - internalEstimateTotal) < 1 ? 'pricing-ok' : 'pricing-warning'}>
+                        {Math.abs(current.budget - internalEstimateTotal) < 1
+                          ? '與預算金額一致'
+                          : current.budget > internalEstimateTotal
+                            ? `較預算少 NT$ ${Math.round(current.budget - internalEstimateTotal).toLocaleString('zh-TW')}`
+                            : `超過預算 NT$ ${Math.round(internalEstimateTotal - current.budget).toLocaleString('zh-TW')}`}
+                      </small>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <p className="muted">尚未建立標價項目。可先填主要交付成果，再按「從交付成果建立」。</p>
+              )}
+            </div>
           </div>
 
           <div className="card security-card">
@@ -304,6 +434,7 @@ export default function App() {
                 <button onClick={() => void exportRequirementsDraft()}>產出勞務採購需求規格書 DOCX 初稿</button>
               </>
             )}
+            <button onClick={() => void exportPriceSchedule()}>產出標價清單 XLSX 初稿</button>
             {templateWriteStatus && <p className="template-write-status">{templateWriteStatus}</p>}
           </div>
         </section>
