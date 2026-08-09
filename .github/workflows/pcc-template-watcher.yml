@@ -4,6 +4,13 @@ on:
   schedule:
     - cron: '30 0 * * 1-5'
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/pcc-watcher.mjs'
+      - 'scripts/pcc-assets.mjs'
+      - '.github/workflows/pcc-template-watcher.yml'
+      - 'package.json'
 
 permissions:
   contents: write
@@ -24,17 +31,21 @@ jobs:
       - name: Fetch PCC official template index
         run: npm run pcc:watch
 
-      - name: Detect official index changes
+      - name: Download and verify core official template files
+        run: npm run pcc:assets
+
+      - name: Detect official template changes
         id: diff
         shell: bash
         run: |
-          if git diff --quiet -- src/data/pcc-template-index.json; then
+          CHANGES="$(git status --porcelain -- src/data/pcc-template-index.json src/data/pcc-template-assets.json official-templates)"
+          if [ -z "$CHANGES" ]; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
-            echo "No PCC template index changes detected."
+            echo "No PCC template changes detected."
           else
             echo "changed=true" >> "$GITHUB_OUTPUT"
-            echo "PCC template index changed."
-            git diff -- src/data/pcc-template-index.json
+            echo "PCC template assets or index changed:"
+            echo "$CHANGES"
           fi
 
       - name: Publish candidate branch
@@ -46,8 +57,8 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git checkout -B "$BRANCH"
-          git add src/data/pcc-template-index.json
-          git commit -m "chore: refresh PCC template index"
+          git add src/data/pcc-template-index.json src/data/pcc-template-assets.json official-templates
+          git commit -m "chore: refresh PCC official template assets"
           git push --force-with-lease origin "$BRANCH"
           echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
 
@@ -60,16 +71,20 @@ jobs:
         run: |
           EXISTING="$(gh pr list --state open --head "$BRANCH" --json number --jq '.[0].number // empty')"
           BODY=$(cat <<'EOF'
-          工程會「招標相關文件及表格」官方索引偵測到變更。
+          工程會公開範本偵測到版本或檔案變更。
 
-          這個 PR 只更新公開的官方範本索引快照，不會自動覆寫目前 active 範本，也不會接觸任何採購案件資料。
+          本 PR 可能包含：
+          - 官方索引快照更新
+          - DOCX / ODT / PDF 官方檔案的新版本封存
+          - 每個檔案的 SHA-256、大小、原始下載 URL 與官方檔名
 
-          請人工確認：
-          1. 文件名稱與最近更新日期是否合理。
-          2. 是否需要下載新版官方檔案並做 SHA-256 / 內容 Diff。
-          3. 確認後再決定是否更新 active Template Registry。
+          安全與版本規則：
+          1. 官方檔案以 `official-templates/<template>/<ROC-version>/` 保存，歷史版本不覆寫。
+          2. 同一版本若官方內容 SHA-256 發生漂移，Watcher 會直接失敗，要求人工調查。
+          3. 此 PR 仍是 candidate，不會自動更新 active Template Registry。
+          4. Watcher 只讀工程會公開網站，不接觸任何採購案件、IndexedDB 或機敏內容。
 
-          安全原則：candidate -> 人工審查 -> active，禁止自動升版。
+          請人工確認新版本與修正內容，再決定是否合併及升版 active Registry。
           EOF
           )
 
@@ -77,7 +92,7 @@ jobs:
             gh pr create \
               --base main \
               --head "$BRANCH" \
-              --title "chore: PCC template index update" \
+              --title "chore: PCC official template assets update" \
               --body "$BODY"
           else
             gh pr edit "$EXISTING" --body "$BODY"
