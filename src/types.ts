@@ -1,6 +1,15 @@
 export type ProcurementCategory = 'service' | 'goods' | 'construction' | 'unknown';
 export type SecurityLevel = 'PUBLIC' | 'INTERNAL' | 'SENSITIVE' | 'RESTRICTED';
 
+export interface PricingItem {
+  id: string;
+  description: string;
+  quantity?: number;
+  unit?: string;
+  estimatedUnitPrice?: number;
+  note?: string;
+}
+
 export interface ProcurementCase {
   id: string;
   title: string;
@@ -13,6 +22,7 @@ export interface ProcurementCase {
   paymentTerms: string;
   acceptanceMethod: string;
   deliverables: string[];
+  pricingItems?: PricingItem[];
   vendorQualification: string;
   procurementMethod?: string;
   awardPrinciple?: string;
