@@ -1,6 +1,12 @@
 import { saveAs } from 'file-saver';
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { buildCanonicalDocumentContext } from './mapping';
+import {
+  appendInlineAtAnchor,
+  insertParagraphAfterAnchor,
+  selectCheckboxOptionAtAnchor,
+  type TemplateMutationResult,
+} from './template-anchor-resolver';
 import type { ProcurementCase } from './types';
 
 const TENDER_TEMPLATE_VERSION = '1150727';
@@ -20,86 +26,6 @@ export interface TemplateWriteReport {
 export interface TemplateWriterOptions {
   download?: boolean;
   onGenerated?: (blob: Blob, filename: string) => void;
-}
-
-function decodeXmlText(value: string) {
-  return value
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&amp;/g, '&');
-}
-
-function escapeXmlText(value: string) {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
-
-function paragraphText(paragraphXml: string) {
-  return [...paragraphXml.matchAll(/<w:t\b[^>]*>([\s\S]*?)<\/w:t>/g)]
-    .map((match) => decodeXmlText(match[1]))
-    .join('')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
-function mutateFirstParagraph(
-  documentXml: string,
-  matcher: (text: string) => boolean,
-  mutate: (paragraphXml: string, text: string) => string,
-) {
-  let changed = false;
-  const xml = documentXml.replace(/<w:p\b[\s\S]*?<\/w:p>/g, (paragraphXml) => {
-    if (changed) return paragraphXml;
-    const text = paragraphText(paragraphXml);
-    if (!matcher(text)) return paragraphXml;
-    const next = mutate(paragraphXml, text);
-    if (next !== paragraphXml) changed = true;
-    return next;
-  });
-  return { xml, changed };
-}
-
-function appendInline(documentXml: string, anchor: string, value: string) {
-  if (!value.trim()) return { xml: documentXml, changed: false };
-  return mutateFirstParagraph(
-    documentXml,
-    (text) => text.includes(anchor),
-    (paragraphXml) => paragraphXml.replace(
-      /<\/w:p>$/,
-      `<w:r><w:t xml:space="preserve">${escapeXmlText(value)}</w:t></w:r></w:p>`,
-    ),
-  );
-}
-
-function insertParagraphAfter(documentXml: string, anchor: string, value: string) {
-  if (!value.trim()) return { xml: documentXml, changed: false };
-  return mutateFirstParagraph(
-    documentXml,
-    (text) => text.includes(anchor),
-    (paragraphXml) => {
-      const pPr = paragraphXml.match(/<w:pPr\b[\s\S]*?<\/w:pPr>/)?.[0] ?? '';
-      const inserted = `<w:p>${pPr}<w:r><w:t xml:space="preserve">${escapeXmlText(value)}</w:t></w:r></w:p>`;
-      return `${paragraphXml}${inserted}`;
-    },
-  );
-}
-
-function selectOption(documentXml: string, optionText: string) {
-  return mutateFirstParagraph(
-    documentXml,
-    (text) => text.includes(optionText),
-    (paragraphXml) => {
-      if (/[■☒]/.test(paragraphXml)) return paragraphXml;
-      if (!/[□☐]/.test(paragraphXml)) return paragraphXml;
-      return paragraphXml.replace(/[□☐]/, '■');
-    },
-  );
 }
 
 function chooseProcurementMethod(value: string) {
@@ -134,13 +60,16 @@ function chooseCategory(category: ProcurementCase['category']) {
 }
 
 function record(
-  result: { changed: boolean },
+  result: TemplateMutationResult,
   label: string,
   report: TemplateWriteReport,
   missingAnchorWarning = true,
 ) {
-  if (result.changed) report.applied.push(label);
-  else if (missingAnchorWarning) report.warnings.push(`${label}：未在官方範本找到可安全寫入的 Anchor 或可勾選符號。`);
+  if (result.changed || (result.resolved && result.reason === 'unchanged')) {
+    report.applied.push(label);
+  } else if (missingAnchorWarning) {
+    report.warnings.push(`${label}：未在官方範本唯一解析到安全 Anchor（匹配 ${result.matches} 個）。`);
+  }
 }
 
 export async function exportTenderInstructionsDraft(
@@ -166,7 +95,7 @@ export async function exportTenderInstructionsDraft(
   let xml = strFromU8(documentPart);
 
   if (context.title.ready) {
-    const result = appendInline(xml, '本標案名稱：', context.title.value);
+    const result = appendInlineAtAnchor(xml, 'word', { text: '本標案名稱：' }, context.title.value);
     xml = result.xml;
     record(result, '標案名稱', report);
   } else report.pending.push('標案名稱');
@@ -174,14 +103,14 @@ export async function exportTenderInstructionsDraft(
   if (context.category.ready) {
     const option = chooseCategory(procurementCase.category);
     if (option) {
-      const result = selectOption(xml, option);
+      const result = selectCheckboxOptionAtAnchor(xml, 'word', option);
       xml = result.xml;
       record(result, '採購類型', report);
     }
   } else report.pending.push('採購類型');
 
   if (context.budget.ready) {
-    const result = appendInline(xml, '本採購預算金額', context.budget.value);
+    const result = appendInlineAtAnchor(xml, 'word', { text: '本採購預算金額' }, context.budget.value);
     xml = result.xml;
     record(result, '預算金額', report);
   } else report.pending.push('預算金額');
@@ -189,7 +118,7 @@ export async function exportTenderInstructionsDraft(
   if (context.procurementMethod.ready) {
     const option = chooseProcurementMethod(context.procurementMethod.value);
     if (option) {
-      const result = selectOption(xml, option);
+      const result = selectCheckboxOptionAtAnchor(xml, 'word', option);
       xml = result.xml;
       record(result, '招標方式', report);
     } else {
@@ -200,7 +129,7 @@ export async function exportTenderInstructionsDraft(
   if (context.awardPrinciple.ready) {
     const option = chooseAwardPrinciple(context.awardPrinciple.value);
     if (option) {
-      const result = selectOption(xml, option);
+      const result = selectCheckboxOptionAtAnchor(xml, 'word', option);
       xml = result.xml;
       record(result, '決標原則', report);
     } else {
@@ -211,7 +140,7 @@ export async function exportTenderInstructionsDraft(
   if (context.awardMethod.ready) {
     const option = chooseAwardMethod(context.awardMethod.value);
     if (option) {
-      const result = selectOption(xml, option);
+      const result = selectCheckboxOptionAtAnchor(xml, 'word', option);
       xml = result.xml;
       record(result, '決標方式', report);
     } else {
@@ -220,21 +149,27 @@ export async function exportTenderInstructionsDraft(
   } else report.pending.push('決標方式');
 
   if (context.bidBond.ready) {
-    const result = appendInline(xml, '押標金金額', ` ${context.bidBond.value}`);
+    const result = appendInlineAtAnchor(xml, 'word', { text: '押標金金額' }, ` ${context.bidBond.value}`);
     xml = result.xml;
     record(result, '押標金', report);
   }
 
   if (context.performanceBond.ready) {
-    const result = appendInline(xml, '履約保證金金額', ` ${context.performanceBond.value}`);
+    const result = appendInlineAtAnchor(
+      xml,
+      'word',
+      { text: '履約保證金金額' },
+      ` ${context.performanceBond.value}`,
+    );
     xml = result.xml;
     record(result, '履約保證金', report);
   }
 
   if (context.vendorQualification.ready) {
-    const result = insertParagraphAfter(
+    const result = insertParagraphAfterAnchor(
       xml,
-      '投標廠商之基本資格及應附具之證明文件如下',
+      'word',
+      { text: '投標廠商之基本資格及應附具之證明文件如下' },
       `【機關填列】${context.vendorQualification.value}`,
     );
     xml = result.xml;

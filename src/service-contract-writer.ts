@@ -1,6 +1,14 @@
 import { saveAs } from 'file-saver';
 import { strFromU8, strToU8, unzipSync, zipSync } from 'fflate';
 import { buildCanonicalDocumentContext } from './mapping';
+import {
+  appendInlineAtAnchor,
+  insertParagraphAfterAnchor,
+  replaceBlockTextAtAnchor,
+  replaceVisibleLiteralAtAnchor,
+  selectCheckboxOptionAtAnchor,
+  type TemplateMutationResult,
+} from './template-anchor-resolver';
 import type { ProcurementCase } from './types';
 
 const SERVICE_TEMPLATE_VERSION = '1141231';
@@ -22,110 +30,6 @@ export interface ServiceContractWriterOptions {
   onGenerated?: (blob: Blob, filename: string) => void;
 }
 
-function decodeXmlText(value: string) {
-  return value
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&quot;/g, '"')
-    .replace(/&apos;/g, "'")
-    .replace(/&amp;/g, '&');
-}
-
-function escapeXmlText(value: string) {
-  return value
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&apos;');
-}
-
-function blockText(blockXml: string) {
-  const normalized = blockXml
-    .replace(/<text:s\b[^>]*text:c="(\d+)"[^>]*\/>/g, (_match, count) => ' '.repeat(Number(count)))
-    .replace(/<text:s\b[^>]*\/>/g, ' ')
-    .replace(/<text:tab\b[^>]*\/>/g, '\t')
-    .replace(/<text:line-break\b[^>]*\/>/g, '\n')
-    .replace(/<[^>]+>/g, '');
-  return decodeXmlText(normalized).replace(/\s+/g, ' ').trim();
-}
-
-function mutateFirstBlock(
-  contentXml: string,
-  matcher: (text: string) => boolean,
-  mutate: (blockXml: string, text: string, tag: string) => string,
-) {
-  let changed = false;
-  const xml = contentXml.replace(/<text:(p|h)\b[\s\S]*?<\/text:\1>/g, (blockXml, tag: string) => {
-    if (changed) return blockXml;
-    const text = blockText(blockXml);
-    if (!matcher(text)) return blockXml;
-    const next = mutate(blockXml, text, tag);
-    changed = next !== blockXml;
-    return next;
-  });
-  return { xml, changed };
-}
-
-function appendInline(contentXml: string, anchor: string, value: string) {
-  if (!value.trim()) return { xml: contentXml, changed: false };
-  return mutateFirstBlock(
-    contentXml,
-    (text) => text.includes(anchor),
-    (blockXml, _text, tag) => blockXml.replace(
-      new RegExp(`</text:${tag}>$`),
-      `<text:span>${escapeXmlText(value)}</text:span></text:${tag}>`,
-    ),
-  );
-}
-
-function insertParagraphAfter(contentXml: string, anchor: string, value: string) {
-  if (!value.trim()) return { xml: contentXml, changed: false };
-  return mutateFirstBlock(
-    contentXml,
-    (text) => text.includes(anchor),
-    (blockXml) => `${blockXml}<text:p>${escapeXmlText(value)}</text:p>`,
-  );
-}
-
-function replaceVisibleLiteral(contentXml: string, anchor: string, literal: string, replacement: string) {
-  if (!replacement.trim()) return { xml: contentXml, changed: false };
-  return mutateFirstBlock(
-    contentXml,
-    (text) => text.includes(anchor),
-    (blockXml) => {
-      const escapedLiteral = escapeXmlText(literal);
-      if (blockXml.includes(escapedLiteral)) return blockXml.replace(escapedLiteral, escapeXmlText(replacement));
-      if (blockXml.includes(literal)) return blockXml.replace(literal, escapeXmlText(replacement));
-      return blockXml;
-    },
-  );
-}
-
-function selectOption(contentXml: string, optionText: string) {
-  return mutateFirstBlock(
-    contentXml,
-    (text) => text.includes(optionText),
-    (blockXml) => {
-      if (/[■☒]/.test(blockXml)) return blockXml;
-      const next = blockXml.replace(/[□☐]/, '■');
-      return next;
-    },
-  );
-}
-
-function replaceBlockText(contentXml: string, anchor: string, value: string) {
-  return mutateFirstBlock(
-    contentXml,
-    (text) => text.includes(anchor),
-    (blockXml, _text, tag) => {
-      const open = blockXml.match(new RegExp(`^<text:${tag}\\b[^>]*>`))?.[0];
-      if (!open) return blockXml;
-      return `${open}${escapeXmlText(value)}</text:${tag}>`;
-    },
-  );
-}
-
 function chooseContractPriceMethod(value: string) {
   if (value.includes('服務成本加公費')) return '服務成本加公費法';
   if (value.includes('按月')) return '按月計酬法';
@@ -143,9 +47,16 @@ function rocDate(value?: string) {
   return `${year - 1911} 年 ${month} 月 ${day} 日`;
 }
 
-function record(result: { changed: boolean }, label: string, report: ServiceContractWriteReport) {
-  if (result.changed) report.applied.push(label);
-  else report.warnings.push(`${label}：未在官方 ODT 找到可安全寫入的 Anchor。`);
+function record(
+  result: TemplateMutationResult,
+  label: string,
+  report: ServiceContractWriteReport,
+) {
+  if (result.changed || (result.resolved && result.reason === 'unchanged')) {
+    report.applied.push(label);
+  } else {
+    report.warnings.push(`${label}：未在官方 ODT 唯一解析到安全 Anchor（匹配 ${result.matches} 個）。`);
+  }
 }
 
 function buildServiceScope(procurementCase: ProcurementCase) {
@@ -184,9 +95,10 @@ export async function exportServiceContractDraft(
   let xml = strFromU8(contentPart);
 
   if (context.agency.ready) {
-    const result = replaceVisibleLiteral(
+    const result = replaceVisibleLiteralAtAnchor(
       xml,
-      '招標機關(以下簡稱機關)',
+      'odt',
+      { text: '招標機關(以下簡稱機關)' },
       '招標機關',
       context.agency.value,
     );
@@ -196,7 +108,12 @@ export async function exportServiceContractDraft(
 
   const scope = buildServiceScope(procurementCase);
   if (scope) {
-    const result = appendInline(xml, '廠商應給付之標的及工作事項', ` ${scope}`);
+    const result = appendInlineAtAnchor(
+      xml,
+      'odt',
+      { text: '廠商應給付之標的及工作事項' },
+      ` ${scope}`,
+    );
     xml = result.xml;
     record(result, '履約標的及工作事項', report);
   } else report.pending.push('履約標的及工作事項');
@@ -204,7 +121,7 @@ export async function exportServiceContractDraft(
   if (context.contractPriceMethod.ready) {
     const option = chooseContractPriceMethod(context.contractPriceMethod.value);
     if (option) {
-      const result = selectOption(xml, option);
+      const result = selectCheckboxOptionAtAnchor(xml, 'odt', option, { checkboxPrefix: true });
       xml = result.xml;
       record(result, '契約價金結算方式', report);
     } else {
@@ -213,9 +130,10 @@ export async function exportServiceContractDraft(
   } else report.pending.push('契約價金結算方式');
 
   if (context.paymentTerms.ready) {
-    const result = insertParagraphAfter(
+    const result = insertParagraphAfterAnchor(
       xml,
-      '第五條 契約價金之給付條件',
+      'odt',
+      { text: '第五條 契約價金之給付條件' },
       `【機關填列】付款條件：${context.paymentTerms.value}`,
     );
     xml = result.xml;
@@ -224,15 +142,21 @@ export async function exportServiceContractDraft(
 
   if (procurementCase.contractStart && procurementCase.contractEnd) {
     const periodLine = `■廠商應於 ${rocDate(procurementCase.contractStart)}至 ${rocDate(procurementCase.contractEnd)}之期間內履行採購標的之供應。`;
-    const result = replaceBlockText(xml, '之期間內履行採購標的之供應', periodLine);
+    const result = replaceBlockTextAtAnchor(
+      xml,
+      'odt',
+      { text: '之期間內履行採購標的之供應' },
+      periodLine,
+    );
     xml = result.xml;
     record(result, '履約期間', report);
   } else report.pending.push('履約期間');
 
   if (context.performanceBond.ready) {
-    const result = insertParagraphAfter(
+    const result = insertParagraphAfterAnchor(
       xml,
-      '第十一條 保證金',
+      'odt',
+      { text: '第十一條 保證金' },
       `【機關填列】履約保證金：${context.performanceBond.value}`,
     );
     xml = result.xml;
@@ -240,9 +164,10 @@ export async function exportServiceContractDraft(
   }
 
   if (context.acceptanceMethod.ready) {
-    const result = insertParagraphAfter(
+    const result = insertParagraphAfterAnchor(
       xml,
-      '驗收程序(由機關擇需要者於招標時載明)',
+      'odt',
+      { text: '驗收程序(由機關擇需要者於招標時載明)' },
       `【機關填列】驗收方式：${context.acceptanceMethod.value}`,
     );
     xml = result.xml;
