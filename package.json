@@ -10,6 +10,7 @@
     "pcc:watch": "node scripts/pcc-watcher.mjs",
     "pcc:assets": "node scripts/pcc-assets.mjs",
     "pcc:text": "node scripts/pcc-text.mjs",
+    "template:anchors": "node scripts/template-anchor-audit.mjs",
     "template:smoke": "node scripts/template-writer-smoke.mjs"
   },
   "dependencies": {
