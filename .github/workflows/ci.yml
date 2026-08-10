@@ -5,6 +5,12 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+    paths-ignore:
+      - 'src/data/pcc-template-index.json'
+      - 'src/data/pcc-template-assets.json'
+      - 'src/data/pcc-template-text.json'
+      - 'src/data/pcc-template-text/**'
+      - 'official-templates/**'
 
 jobs:
   build:
