@@ -56,6 +56,8 @@ const templates = [
   },
 ];
 
+const CHECKBOX = /[□☐■☒]/;
+
 function decodeXml(value) {
   return value
     .replace(/&lt;/g, '<')
@@ -98,13 +100,16 @@ async function auditTemplate(template) {
 
   const problems = [];
   for (const anchor of template.anchors) {
-    const matches = blocks.filter((block) => block.text.includes(anchor.text));
+    const textMatches = blocks.filter((block) => block.text.includes(anchor.text));
+    const matches = anchor.selectable
+      ? textMatches.filter((block) => CHECKBOX.test(block.xml))
+      : textMatches;
+
     if (matches.length !== 1) {
-      problems.push(`${anchor.id}: expected 1 match for "${anchor.text}", got ${matches.length}`);
-      continue;
-    }
-    if (anchor.selectable && !/[□☐■☒]/.test(matches[0].xml)) {
-      problems.push(`${anchor.id}: anchor resolved but checkbox glyph is missing`);
+      const context = anchor.selectable ? ' selectable/checkbox match' : ' match';
+      problems.push(
+        `${anchor.id}: expected 1${context} for "${anchor.text}", got ${matches.length} (text-only matches: ${textMatches.length})`,
+      );
     }
   }
 
