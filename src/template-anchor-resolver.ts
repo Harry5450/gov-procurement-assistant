@@ -68,14 +68,14 @@ function collectBlocks(xml: string, kind: TemplateXmlKind): TemplateBlock[] {
     return [...xml.matchAll(/<w:p\b[\s\S]*?<\/w:p>/g)].map((match) => ({
       xml: match[0],
       text: wordParagraphText(match[0]),
-      index: match.index,
+      index: match.index ?? 0,
     }));
   }
 
   return [...xml.matchAll(/<text:(p|h)\b[\s\S]*?<\/text:\1>/g)].map((match) => ({
     xml: match[0],
     text: odtBlockText(match[0]),
-    index: match.index,
+    index: match.index ?? 0,
     tag: match[1],
   }));
 }
