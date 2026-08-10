@@ -126,13 +126,20 @@ function replaceBlockText(contentXml: string, anchor: string, value: string) {
   );
 }
 
+function normalizeChoice(value: string) {
+  return value
+    .normalize('NFKC')
+    .replace(/[\s\u200B-\u200D\u2060\uFEFF]/g, '');
+}
+
 function chooseContractPriceMethod(value: string) {
-  if (value.includes('服務成本加公費')) return '服務成本加公費法';
-  if (value.includes('按月')) return '按月計酬法';
-  if (value.includes('按日')) return '按日計酬法';
-  if (value.includes('按時')) return '按時計酬法';
-  if (value.includes('單價')) return '單價計算法';
-  if (value.includes('總包') || value.includes('總價')) return '總包價法';
+  const normalized = normalizeChoice(value);
+  if (normalized.includes('服務成本加公費')) return '服務成本加公費法';
+  if (normalized.includes('按月')) return '按月計酬法';
+  if (normalized.includes('按日')) return '按日計酬法';
+  if (normalized.includes('按時')) return '按時計酬法';
+  if (normalized.includes('單價')) return '單價計算法';
+  if (normalized.includes('總包') || normalized.includes('總價')) return '總包價法';
   return undefined;
 }
 
