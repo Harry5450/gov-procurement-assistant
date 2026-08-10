@@ -10,6 +10,7 @@ on:
       - 'scripts/pcc-watcher.mjs'
       - 'scripts/pcc-assets.mjs'
       - 'scripts/pcc-text.mjs'
+      - 'scripts/template-anchor-audit.mjs'
       - '.github/workflows/pcc-template-watcher.yml'
       - 'package.json'
 
@@ -63,7 +64,9 @@ jobs:
           node --check scripts/pcc-watcher.mjs
           node --check scripts/pcc-assets.mjs
           node --check scripts/pcc-text.mjs
+          node --check scripts/template-anchor-audit.mjs
           npm run pcc:text -- --dry-run
+          npm run template:anchors
           npm run template:smoke
           npm run build
 
@@ -100,8 +103,9 @@ jobs:
           - `latest/*.txt` 的 Git diff，可直接閱讀新版與前一版的文字差異
 
           自動驗證已在 PCC Template Watcher 內完成：
-          - watcher / asset / text script syntax check
+          - watcher / asset / text / anchor audit script syntax check
           - normalized text dry-run
+          - writer anchor uniqueness + checkbox audit
           - template writer smoke test
           - production build
 
@@ -109,9 +113,10 @@ jobs:
           1. 官方檔案以 `official-templates/<template>/<ROC-version>/` 保存，歷史版本不覆寫。
           2. 同一版本若官方內容 SHA-256 發生漂移，Watcher 會直接失敗，要求人工調查。
           3. versioned normalized text 同樣 immutable；`latest/*.txt` 僅作為人工 review diff。
-          4. 此 PR 仍是 candidate，不會自動更新 active Template Registry。
-          5. Watcher 只讀工程會公開網站，不接觸任何採購案件、IndexedDB 或機敏內容。
-          6. 純 generated-data candidate PR 不重複觸發一般 CI；程式碼／workflow PR 仍會跑完整 CI。
+          4. Writer 使用的 Anchor 必須在對應官方 XML 唯一解析；缺失或歧義時 candidate validation 直接失敗。
+          5. 此 PR 仍是 candidate，不會自動更新 active Template Registry。
+          6. Watcher 只讀工程會公開網站，不接觸任何採購案件、IndexedDB 或機敏內容。
+          7. 純 generated-data candidate PR 不重複觸發一般 CI；程式碼／workflow PR 仍會跑完整 CI。
 
           請人工確認新版本與文字差異，再決定是否合併及升版 active Registry。
           EOF
