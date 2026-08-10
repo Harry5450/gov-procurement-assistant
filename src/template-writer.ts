@@ -102,27 +102,36 @@ function selectOption(documentXml: string, optionText: string) {
   );
 }
 
+function normalizeChoice(value: string) {
+  return value
+    .normalize('NFKC')
+    .replace(/[\s\u200B-\u200D\u2060\uFEFF]/g, '');
+}
+
 function chooseProcurementMethod(value: string) {
-  if (value.includes('公開取得')) return '依採購法第49條規定公開取得書面報價或企劃書';
-  if (value.includes('限制性')) return '(3)限制性招標';
-  if (value.includes('選擇性')) return '(2)選擇性招標';
-  if (value.includes('公開招標')) return '(1)公開招標';
+  const normalized = normalizeChoice(value);
+  if (normalized.includes('公開取得')) return '依採購法第49條規定公開取得書面報價或企劃書';
+  if (normalized.includes('限制性')) return '(3)限制性招標';
+  if (normalized.includes('選擇性')) return '(2)選擇性招標';
+  if (normalized.includes('公開招標')) return '(1)公開招標';
   return undefined;
 }
 
 function chooseAwardPrinciple(value: string) {
-  if (value.includes('最有利')) return '(2)最有利標';
-  if (value.includes('最高')) return '(3)最高標';
-  if (value.includes('最低')) return '(1)最低標';
+  const normalized = normalizeChoice(value);
+  if (normalized.includes('最有利')) return '(2)最有利標';
+  if (normalized.includes('最高')) return '(3)最高標';
+  if (normalized.includes('最低')) return '(1)最低標';
   return undefined;
 }
 
 function chooseAwardMethod(value: string) {
-  if (value.includes('總價')) return '(2-1)總價決標';
-  if (value.includes('分項')) return '(2-2)分項決標';
-  if (value.includes('分組')) return '(2-3)分組決標';
-  if (value.includes('數量')) return '(2-4)依數量決標';
-  if (value.includes('單價')) return '(2-5)單價決標';
+  const normalized = normalizeChoice(value);
+  if (normalized.includes('總價')) return '(2-1)總價決標';
+  if (normalized.includes('分項')) return '(2-2)分項決標';
+  if (normalized.includes('分組')) return '(2-3)分組決標';
+  if (normalized.includes('數量')) return '(2-4)依數量決標';
+  if (normalized.includes('單價')) return '(2-5)單價決標';
   return undefined;
 }
 
