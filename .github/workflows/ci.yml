@@ -29,3 +29,4 @@ jobs:
       - run: npm run template:anchors
       - run: npm run template:smoke
       - run: npm run build
+      - run: npm run e2e
