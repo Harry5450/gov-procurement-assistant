@@ -24,6 +24,8 @@ jobs:
       - run: node --check scripts/pcc-watcher.mjs
       - run: node --check scripts/pcc-assets.mjs
       - run: node --check scripts/pcc-text.mjs
+      - run: node --check scripts/template-anchor-audit.mjs
       - run: npm run pcc:text -- --dry-run
+      - run: npm run template:anchors
       - run: npm run template:smoke
       - run: npm run build
