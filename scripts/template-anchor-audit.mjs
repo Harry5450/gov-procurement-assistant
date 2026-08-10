@@ -46,17 +46,18 @@ const templates = [
       { id: 'contractPeriod', text: '之期間內履行採購標的之供應' },
       { id: 'performanceBond', text: '第十一條 保證金' },
       { id: 'acceptanceMethod', text: '驗收程序(由機關擇需要者於招標時載明)' },
-      { id: 'price.total', text: '總包價法', selectable: true },
-      { id: 'price.unit', text: '單價計算法', selectable: true },
-      { id: 'price.costPlus', text: '服務成本加公費法', selectable: true },
-      { id: 'price.monthly', text: '按月計酬法', selectable: true },
-      { id: 'price.daily', text: '按日計酬法', selectable: true },
-      { id: 'price.hourly', text: '按時計酬法', selectable: true },
+      { id: 'price.total', text: '總包價法', selectable: true, checkboxPrefix: true },
+      { id: 'price.unit', text: '單價計算法', selectable: true, checkboxPrefix: true },
+      { id: 'price.costPlus', text: '服務成本加公費法', selectable: true, checkboxPrefix: true },
+      { id: 'price.monthly', text: '按月計酬法', selectable: true, checkboxPrefix: true },
+      { id: 'price.daily', text: '按日計酬法', selectable: true, checkboxPrefix: true },
+      { id: 'price.hourly', text: '按時計酬法', selectable: true, checkboxPrefix: true },
     ],
   },
 ];
 
 const CHECKBOX = /[□☐■☒]/;
+const CHECKBOX_GLYPHS = ['', '□', '☐', '■', '☒'];
 
 function decodeXml(value) {
   return value
@@ -86,6 +87,11 @@ function odtBlockText(blockXml) {
   ).replace(/\s+/g, ' ').trim();
 }
 
+function startsWithCheckboxOption(text, optionText) {
+  const compact = text.replace(/\s+/g, '');
+  return CHECKBOX_GLYPHS.some((glyph) => compact.startsWith(`${glyph}${optionText}`));
+}
+
 async function auditTemplate(template) {
   const buffer = await readFile(template.path);
   const archive = unzipSync(new Uint8Array(buffer));
@@ -101,12 +107,18 @@ async function auditTemplate(template) {
   const problems = [];
   for (const anchor of template.anchors) {
     const textMatches = blocks.filter((block) => block.text.includes(anchor.text));
-    const matches = anchor.selectable
-      ? textMatches.filter((block) => CHECKBOX.test(block.xml))
-      : textMatches;
+    let matches = textMatches;
+    let context = ' match';
+
+    if (anchor.checkboxPrefix) {
+      matches = textMatches.filter((block) => startsWithCheckboxOption(block.text, anchor.text));
+      context = ' checkbox-prefixed option match';
+    } else if (anchor.selectable) {
+      matches = textMatches.filter((block) => CHECKBOX.test(block.xml));
+      context = ' selectable/checkbox match';
+    }
 
     if (matches.length !== 1) {
-      const context = anchor.selectable ? ' selectable/checkbox match' : ' match';
       problems.push(
         `${anchor.id}: expected 1${context} for "${anchor.text}", got ${matches.length} (text-only matches: ${textMatches.length})`,
       );
