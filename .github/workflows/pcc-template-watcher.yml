@@ -52,6 +52,21 @@ jobs:
             echo "$CHANGES"
           fi
 
+      - name: Install dependencies for candidate validation
+        if: steps.diff.outputs.changed == 'true'
+        run: npm install
+
+      - name: Validate candidate snapshot and application
+        if: steps.diff.outputs.changed == 'true'
+        shell: bash
+        run: |
+          node --check scripts/pcc-watcher.mjs
+          node --check scripts/pcc-assets.mjs
+          node --check scripts/pcc-text.mjs
+          npm run pcc:text -- --dry-run
+          npm run template:smoke
+          npm run build
+
       - name: Publish candidate branch
         if: steps.diff.outputs.changed == 'true'
         id: publish
@@ -84,12 +99,19 @@ jobs:
           - 由 ODT deterministic extraction 產生的 normalized text
           - `latest/*.txt` 的 Git diff，可直接閱讀新版與前一版的文字差異
 
+          自動驗證已在 PCC Template Watcher 內完成：
+          - watcher / asset / text script syntax check
+          - normalized text dry-run
+          - template writer smoke test
+          - production build
+
           安全與版本規則：
           1. 官方檔案以 `official-templates/<template>/<ROC-version>/` 保存，歷史版本不覆寫。
           2. 同一版本若官方內容 SHA-256 發生漂移，Watcher 會直接失敗，要求人工調查。
           3. versioned normalized text 同樣 immutable；`latest/*.txt` 僅作為人工 review diff。
           4. 此 PR 仍是 candidate，不會自動更新 active Template Registry。
           5. Watcher 只讀工程會公開網站，不接觸任何採購案件、IndexedDB 或機敏內容。
+          6. 純 generated-data candidate PR 不重複觸發一般 CI；程式碼／workflow PR 仍會跑完整 CI。
 
           請人工確認新版本與文字差異，再決定是否合併及升版 active Registry。
           EOF
