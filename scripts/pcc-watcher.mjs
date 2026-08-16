@@ -58,13 +58,44 @@ function parseRows(html) {
   return rows.sort((a, b) => a.sequence - b.sequence);
 }
 
-const response = await fetch(SOURCE_URL, {
+// --- Added: fetchWithRetry helper to reduce transient network flakes ---
+async function fetchWithRetry(url, { headers } = {}, attempts = 4, perAttemptTimeoutMs = 60000, baseBackoffMs = 2000) {
+  for (let attempt = 1; attempt <= attempts; attempt++) {
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), perAttemptTimeoutMs);
+
+      const response = await fetch(url, {
+        method: 'GET',
+        headers,
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeout);
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status} ${response.statusText}`);
+      }
+      return response;
+    } catch (err) {
+      const isLast = attempt === attempts;
+      console.error(`fetchWithRetry: attempt ${attempt}/${attempts} failed: ${err?.message || err}`);
+      if (isLast) throw err;
+      // exponential-ish backoff before retrying
+      const wait = baseBackoffMs * attempt;
+      console.error(`fetchWithRetry: retrying in ${wait}ms...`);
+      await new Promise((res) => setTimeout(res, wait));
+    }
+  }
+}
+// -------------------------------------------------------------------
+
+const response = await fetchWithRetry(SOURCE_URL, {
   headers: {
     'user-agent': 'GovProcure-Assistant-PCC-Watcher/0.2 (+GitHub Actions)',
     accept: 'text/html,application/xhtml+xml',
   },
-  signal: AbortSignal.timeout(30000),
-});
+}, 4, 60000);
 
 if (!response.ok) {
   throw new Error(`PCC request failed: ${response.status} ${response.statusText}`);
