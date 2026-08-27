@@ -63,6 +63,29 @@ export interface GeminiAnalysisResult {
   totalTokenCount?: number;
 }
 
+export interface GeminiDraftPricingItem {
+  description: string;
+  quantity?: number;
+  unit?: string;
+  note?: string;
+}
+
+export interface GeminiProcurementDraft {
+  paymentTerms: string;
+  acceptanceMethod: string;
+  vendorQualification: string;
+  deliverables: string[];
+  pricingItems: GeminiDraftPricingItem[];
+  warnings: string[];
+}
+
+export interface GeminiProcurementDraftResult {
+  draft: GeminiProcurementDraft;
+  requestedModel: string;
+  resolvedModel: string;
+  totalTokenCount?: number;
+}
+
 export interface GeminiRequestOptions {
   fetchImpl?: typeof fetch;
   signal?: AbortSignal;
@@ -237,6 +260,162 @@ function buildProcurementPrompt(context: SanitizedAIContext) {
   ].join('\n');
 }
 
+const PROCUREMENT_DRAFT_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  properties: {
+    paymentTerms: {
+      type: 'string',
+      description: '可直接編輯的付款條件草稿；須與可驗收成果連動，不得虛構預算、底價或付款日期。',
+    },
+    acceptanceMethod: {
+      type: 'string',
+      description: '可直接編輯的驗收方式草稿；應列出成果、文件與客觀檢核方式，不得捏造未提供的技術門檻。',
+    },
+    vendorQualification: {
+      type: 'string',
+      description: '一般且與履約能力直接相關的廠商資格草稿；不得虛構證照、年資、實績金額或限制競爭條件。',
+    },
+    deliverables: {
+      type: 'array',
+      minItems: 1,
+      maxItems: 12,
+      items: { type: 'string' },
+      description: '3至12項具體、可驗收且不重複的主要交付成果。',
+    },
+    pricingItems: {
+      type: 'array',
+      minItems: 1,
+      maxItems: 12,
+      items: {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          description: { type: 'string', description: '工作項目或交付成果名稱。' },
+          quantity: { type: ['number', 'null'], description: '需求明確可推得時才填正數，否則填 null。' },
+          unit: { type: 'string', description: '例如式、月、場、份、件；無法判斷時留空字串。' },
+          note: { type: 'string', description: '需承辦人確認的數量、範圍或計價假設。' },
+        },
+        required: ['description', 'quantity', 'unit', 'note'],
+      },
+      description: '不含單價、預估金額或底價的標價清單工作項目草稿。',
+    },
+    warnings: {
+      type: 'array',
+      maxItems: 12,
+      items: { type: 'string' },
+      description: '資料不足、特定資格、保險、數量或驗收標準等必須由承辦人確認的事項。',
+    },
+  },
+  required: ['paymentTerms', 'acceptanceMethod', 'vendorQualification', 'deliverables', 'pricingItems', 'warnings'],
+} as const;
+
+function buildProcurementDraftPrompt(context: SanitizedAIContext) {
+  return [
+    '請根據下列已去除機敏資訊的採購需求，產生「履約與標價項目草稿」。',
+    '所有內容只是承辦人可編輯的起草建議，不得當成法定判斷或市場調查結果。',
+    '不得產生或推算：底價、預估單價、保額、總預算、招標方式、決標原則、決標方式。',
+    '不得虛構法定證照、特定會員資格、最低實績金額、品牌或其他可能限制競爭的資格。若資料不足，請放入 warnings。',
+    '付款條件必須連動到可驗收成果；驗收方式須盡量客觀；工作項目的數量只有在需求可合理推得時才填，否則填 null。',
+    '',
+    '--- 已去敏感案件資料（JSON）---',
+    JSON.stringify(context, null, 2),
+    '--- 資料結束 ---',
+  ].join('\n');
+}
+
+function assertRecord(value: unknown, label: string): asserts value is Record<string, unknown> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new GeminiApiError(`Gemini ${label}格式不正確。`);
+  }
+}
+
+function assertKnownKeys(value: Record<string, unknown>, allowed: string[], label: string) {
+  const unknown = Object.keys(value).filter((key) => !allowed.includes(key));
+  if (unknown.length) throw new GeminiApiError(`Gemini ${label}含有未預期欄位：${unknown.join('、')}。`);
+}
+
+function draftString(value: unknown, label: string, maxLength: number) {
+  if (typeof value !== 'string') throw new GeminiApiError(`Gemini 草稿欄位「${label}」不是文字。`);
+  const normalized = value.trim();
+  if (normalized.length > maxLength) throw new GeminiApiError(`Gemini 草稿欄位「${label}」過長，已停止套用。`);
+  return normalized;
+}
+
+function draftStringArray(value: unknown, label: string, maxItems: number, maxLength: number) {
+  if (!Array.isArray(value)) throw new GeminiApiError(`Gemini 草稿欄位「${label}」不是清單。`);
+  if (value.length > maxItems) throw new GeminiApiError(`Gemini 草稿欄位「${label}」項目過多，已停止套用。`);
+  const seen = new Set<string>();
+  const items: string[] = [];
+  for (const entry of value) {
+    const normalized = draftString(entry, label, maxLength);
+    const key = normalized.toLocaleLowerCase('zh-TW');
+    if (normalized && !seen.has(key)) {
+      seen.add(key);
+      items.push(normalized);
+    }
+  }
+  return items;
+}
+
+export function parseGeminiProcurementDraft(text: string): GeminiProcurementDraft {
+  const normalizedText = text.trim()
+    .replace(/^```(?:json)?\s*/i, '')
+    .replace(/\s*```$/i, '');
+  let value: unknown;
+  try {
+    value = JSON.parse(normalizedText);
+  } catch {
+    throw new GeminiApiError('Gemini 回傳的履約草稿不是有效 JSON。');
+  }
+
+  assertRecord(value, '履約草稿');
+  assertKnownKeys(value, ['paymentTerms', 'acceptanceMethod', 'vendorQualification', 'deliverables', 'pricingItems', 'warnings'], '履約草稿');
+
+  if (!Array.isArray(value.pricingItems) || value.pricingItems.length > 12) {
+    throw new GeminiApiError('Gemini 草稿欄位「標價項目」格式不正確或項目過多。');
+  }
+  const seenPricing = new Set<string>();
+  const pricingItems: GeminiDraftPricingItem[] = [];
+  for (const rawItem of value.pricingItems) {
+    assertRecord(rawItem, '標價項目');
+    assertKnownKeys(rawItem, ['description', 'quantity', 'unit', 'note'], '標價項目');
+    const description = draftString(rawItem.description, '工作項目', 200);
+    if (!description) continue;
+    const key = description.toLocaleLowerCase('zh-TW');
+    if (seenPricing.has(key)) continue;
+    seenPricing.add(key);
+
+    let quantity: number | undefined;
+    if (rawItem.quantity !== null && rawItem.quantity !== undefined) {
+      if (typeof rawItem.quantity !== 'number' || !Number.isFinite(rawItem.quantity) || rawItem.quantity <= 0 || rawItem.quantity > 1_000_000) {
+        throw new GeminiApiError(`Gemini 標價項目「${description}」的數量不正確。`);
+      }
+      quantity = rawItem.quantity;
+    }
+    pricingItems.push({
+      description,
+      quantity,
+      unit: draftString(rawItem.unit, '單位', 30) || undefined,
+      note: draftString(rawItem.note, '項目備註', 300) || undefined,
+    });
+  }
+
+  const deliverables = draftStringArray(value.deliverables, '主要交付成果', 12, 300);
+  if (!deliverables.length || !pricingItems.length) {
+    throw new GeminiApiError('Gemini 履約草稿缺少可用的交付成果或標價項目。');
+  }
+
+  return {
+    paymentTerms: draftString(value.paymentTerms, '付款條件', 1_500),
+    acceptanceMethod: draftString(value.acceptanceMethod, '驗收方式', 1_500),
+    vendorQualification: draftString(value.vendorQualification, '廠商資格', 1_500),
+    deliverables,
+    pricingItems,
+    warnings: draftStringArray(value.warnings, '待確認事項', 12, 500),
+  };
+}
+
 function extractGeminiText(payload: GeminiGenerateResponse) {
   const text = payload.candidates?.[0]?.content?.parts
     ?.map((part) => part.text ?? '')
@@ -298,6 +477,64 @@ export async function analyzeProcurementWithGemini(
 
       return {
         text: extractGeminiText(payload),
+        requestedModel: model,
+        resolvedModel: payload.modelVersion || model,
+        totalTokenCount: payload.usageMetadata?.totalTokenCount,
+      };
+    } catch (error) {
+      if (isUnavailableModelError(error) && model !== requestedModels.at(-1)) {
+        lastUnavailableError = error;
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  throw lastUnavailableError ?? new GeminiApiError('找不到可使用的 Gemini Flash 模型。');
+}
+
+export async function generateProcurementDraftWithGemini(
+  context: SanitizedAIContext,
+  apiKey: string,
+  selectedModel: string,
+  options: GeminiRequestOptions = {},
+): Promise<GeminiProcurementDraftResult> {
+  requireApiKey(apiKey);
+  const requestedModels = [...new Set([
+    selectedModel.trim() || GEMINI_FLASH_LATEST_ALIAS,
+    GEMINI_FLASH_LATEST_ALIAS,
+  ])];
+
+  let lastUnavailableError: unknown;
+  for (const model of requestedModels) {
+    try {
+      const url = `${GEMINI_API_ROOT}/models/${encodeURIComponent(model)}:generateContent`;
+      const payload = await geminiFetchJson<GeminiGenerateResponse>(url, apiKey, {
+        method: 'POST',
+        body: JSON.stringify({
+          system_instruction: {
+            parts: [{
+              text: '你是臺灣政府採購文件的草稿助理。只起草可供人工修改的履約內容，不得替機關決定法定程序、資格限制、底價或價格。',
+            }],
+          },
+          contents: [{
+            role: 'user',
+            parts: [{ text: buildProcurementDraftPrompt(context) }],
+          }],
+          generationConfig: {
+            maxOutputTokens: 4096,
+            responseFormat: {
+              text: {
+                mimeType: 'application/json',
+                schema: PROCUREMENT_DRAFT_SCHEMA,
+              },
+            },
+          },
+        }),
+      }, options);
+
+      return {
+        draft: parseGeminiProcurementDraft(extractGeminiText(payload)),
         requestedModel: model,
         resolvedModel: payload.modelVersion || model,
         totalTokenCount: payload.usageMetadata?.totalTokenCount,

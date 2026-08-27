@@ -28,6 +28,8 @@ Local-first 的公務採購文件輔助系統。目標是讓一般承辦人從�
 - 使用者自備 Gemini API Key（僅保留在目前頁面記憶體）
 - 由 Gemini Models API 自動選擇最新穩定文字 Flash，命名無法辨識時改用官方 latest 別名
 - Gemini 案件缺漏檢核（只回傳建議，不自動修改案件或法定選項）
+- Gemini 履約草稿（付款、驗收、廠商資格、交付成果及不含價格的標價項目；預覽後只套用空白欄位）
+- 依採購金額、採購類型與前置選擇連動的招標／決標下拉選單、法源說明及人工確認建議
 - 工程會 active Template Registry
 - PCC 官方索引快照與版本日期比對
 - PCC 核心範本 detail page 解析
@@ -131,7 +133,14 @@ Mapping coverage / 缺漏欄位
 後續 Template Writer 寫入官方範本
 ```
 
-Mapping Engine 目前只負責「欄位來源、目標欄位、官方文字 Anchor、必要性與完整度」，不會自動替承辦人決定法定招標方式、決標原則或保證金設定。這些欄位由承辦人輸入後，系統負責讓所有文件使用同一個值。
+Mapping Engine 目前只負責「欄位來源、目標欄位、官方文字 Anchor、必要性與完整度」。規則模組會依金額與採購類型縮小合法候選選項並提出建議，但不會替承辦人自動選定法定招標方式、決標原則或保證金設定；使用者確認後，系統才讓所有文件使用同一個值。
+
+## 採購程序關聯規則
+
+- 目前內建的是中央機關基準：15 萬元以下為小額採購；逾 15 萬元、未達 150 萬元原則依採購法第 49 條公開取得書面報價或企劃書；150 萬元以上原則公開招標。門檻來源：[工程會公告](https://www.pcc.gov.tw/content/index?eid=3950&lang=1&ltype=N&nn=E7BDAFCB081133B5&sms=53E09032BF601A56)。
+- 例如 50 萬元勞務採購，系統建議「公開取得書面報價或企劃書」；若成果品質具有差異，另建議承辦人評估「參考最有利標精神」，但不會自動選取或把它當成正式最有利標。
+- 選擇性招標、限制性招標、正式／準用最有利標與複數決標均顯示法定條件或人工敘明提醒。依據：[政府採購法](https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=A0030057)、[中央機關未達公告金額採購招標辦法](https://www.pcc.gov.tw/content/cp.aspx?n=C3B971E6865398D9)。
+- 地方機關仍須先確認直轄市或縣（市）的另定規定；所有建議都只是決策輔助，使用者必須從下拉選單確認後才會視為完成。
 
 ## PCC Template Watcher
 
@@ -186,6 +195,7 @@ Watcher 每週一至週五自動執行，也可從 GitHub Actions 手動執行�
 - [x] 使用者自備 Gemini API Key
 - [x] Gemini 最新穩定 Flash 自動探索與 latest alias fallback
 - [x] Local DLP Scanner（白名單 context＋敏感詞阻擋）
+- [x] 結構化履約與標價項目草稿（人工預覽、只填空白欄位、不產生價格）
 - [ ] Placeholder tokenization
 - [x] AI 外送內容逐次預覽
 - [ ] Audit log（不保存原始機敏內容）
@@ -202,7 +212,8 @@ Watcher 每週一至週五自動執行，也可從 GitHub Actions 手動執行�
 2. 系統以 `x-goog-api-key` header 驗證 Key，Key 不放在網址、請求本文或 log。
 3. 系統從 `models.list` 回傳結果選擇最高版本的穩定文字 Flash；若未來命名規則改變，才使用 `gemini-flash-latest`。
 4. Key 只存在目前 React 頁面的記憶體；重新整理、關閉頁面或按「清除」後即消失，不寫入 IndexedDB、JSON、DOCX、XLSX 或 ZIP。
-5. 每次外送前仍會經過 `privacy.ts` 白名單與敏感內容檢查；AI 結果只供人工審查，不會自動改寫案件。
+5. 每次外送前仍會經過 `privacy.ts` 白名單與敏感內容檢查；AI 結果先以結構化草稿預覽，只有使用者按下「套用到空白欄位」才會寫入，既有內容不會被覆蓋。
+6. 標案名稱、機關名稱、預算、底價、內部備註與預估單價都不會送給 Gemini；AI 也不得產生底價、保額、單價或法定招決標選項。
 
 Google 官方仍建議正式產品使用後端代理保護 API Key。GitHub Pages 是純靜態網站，本專案採用的是「使用者自備 Key、明確知情、當頁記憶體保存」模式；請建立專用 Key、限制用途並設定用量／帳務警示。參考：[Gemini API Key 安全說明](https://ai.google.dev/gemini-api/docs/api-key)。
 

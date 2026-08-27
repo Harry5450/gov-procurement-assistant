@@ -26,7 +26,7 @@ h3 { margin-bottom: 8px; }
 .privacy-badge.ai-enabled { background: #edf2ff; color: #244078; }
 
 .layout { display: grid; grid-template-columns: 290px minmax(0, 1fr); gap: 20px; padding: 24px clamp(18px, 4vw, 56px) 50px; max-width: 1500px; margin: 0 auto; }
-.card { background: white; border: 1px solid #dfe5ef; border-radius: 16px; padding: 20px; box-shadow: 0 8px 24px rgba(31, 46, 74, .04); }
+.card { min-width: 0; background: white; border: 1px solid #dfe5ef; border-radius: 16px; padding: 20px; box-shadow: 0 8px 24px rgba(31, 46, 74, .04); }
 .sidebar { align-self: start; position: sticky; top: 20px; }
 .sidebar-heading { display: flex; justify-content: space-between; gap: 10px; align-items: center; }
 .sidebar-heading h2 { margin: 0; }
@@ -36,7 +36,7 @@ h3 { margin-bottom: 8px; }
 .case-open { display: grid; gap: 4px; width: 100%; text-align: left; background: transparent; color: inherit; padding: 0; }
 .case-open span { color: #7c8797; font-size: 12px; }
 
-.content { display: grid; gap: 18px; }
+.content { min-width: 0; display: grid; gap: 18px; }
 .progress-card { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 18px; }
 .score { display: block; font-size: 28px; }
 .progress { background: #e9eef6; height: 10px; border-radius: 999px; overflow: hidden; }
@@ -95,12 +95,47 @@ li { margin-bottom: 7px; }
 .package-readiness.blocked { color: #9c4f20; }
 .template-write-status { flex-basis: 100%; margin: 4px 0 0; padding: 12px 14px; border-radius: 10px; background: #f5f8ff; color: #334f86; font-size: 13px; line-height: 1.6; }
 
+.procurement-guidance { margin: 16px 0 20px; padding: 16px; border: 1px solid #d7e2f7; border-radius: 14px; background: #f7f9fd; }
+.guidance-heading { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
+.guidance-heading h3 { margin: 5px 0; }
+.guidance-heading p { margin: 0; color: #4f5f75; line-height: 1.55; }
+.recommendation-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+.recommendation-grid > div { padding: 12px; border: 1px solid #dfe7f5; border-radius: 11px; background: white; }
+.recommendation-grid small { display: block; color: #61708a; font-weight: 800; }
+.recommendation-grid strong { display: block; margin-top: 5px; color: #244078; }
+.recommendation-grid p { margin: 6px 0 0; color: #6b778c; font-size: 12px; line-height: 1.55; }
+.guidance-warnings { margin: 13px 0 0; color: #76551d; font-size: 12px; line-height: 1.55; }
+.guidance-sources { display: flex; flex-wrap: wrap; gap: 5px 8px; margin: 10px 0 0; font-size: 12px; }
+.guided-select > span { font-weight: 700; }
+.guided-select small { min-height: 36px; color: #61708a; font-weight: 500; line-height: 1.5; }
+.guided-select small.guided-warning { color: #8a5e14; }
+
+.section-heading { display: flex; justify-content: space-between; gap: 18px; align-items: flex-start; }
+.section-heading h2 { margin-bottom: 5px; }
+.section-heading p { margin: 0; font-size: 13px; }
+.ai-draft-button { white-space: nowrap; background: #5a46c8; }
+.ai-draft-safety { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 12px 0 18px; padding: 10px 12px; border-radius: 10px; background: #f5f2ff; color: #54458b; font-size: 12px; line-height: 1.55; }
+.ai-draft-preview { margin-top: 16px; padding: 16px; border: 1px solid #cfc7f4; border-radius: 14px; background: #fbfaff; }
+.ai-draft-preview.stale { border-color: #e8c778; background: #fffaf0; }
+.ai-draft-preview-heading { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.ai-draft-preview-heading h3 { margin: 0 0 5px; }
+.ai-draft-preview-heading p { margin: 0; color: #6b778c; font-size: 12px; }
+.ai-draft-field-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-top: 14px; }
+.ai-draft-field-grid > div { padding: 12px; border-radius: 10px; background: white; border: 1px solid #e3def8; }
+.ai-draft-field-grid p { margin: 6px 0 0; white-space: pre-wrap; color: #4f5f75; font-size: 13px; line-height: 1.6; }
+.ai-draft-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-top: 16px; }
+.ai-draft-columns ol { margin-bottom: 0; }
+.draft-pricing-list { display: grid; gap: 7px; margin-top: 9px; }
+.draft-pricing-list > div { display: grid; gap: 3px; padding-bottom: 7px; border-bottom: 1px solid #e7e2f6; }
+.draft-pricing-list small { color: #6b778c; }
+.ai-draft-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+
 .pricing-section { margin-top: 20px; padding-top: 18px; border-top: 1px solid #e8edf4; }
 .pricing-heading { display: flex; justify-content: space-between; gap: 16px; align-items: flex-start; }
 .pricing-heading h3 { margin-top: 0; }
 .pricing-heading p { margin: 0; max-width: 760px; font-size: 13px; line-height: 1.6; }
 .pricing-toolbar { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
-.pricing-table { margin-top: 16px; overflow-x: auto; border: 1px solid #dfe5ef; border-radius: 12px; }
+.pricing-table { width: 100%; max-width: 100%; margin-top: 16px; overflow-x: auto; border: 1px solid #dfe5ef; border-radius: 12px; }
 .pricing-grid { min-width: 920px; display: grid; grid-template-columns: 48px minmax(240px, 1.7fr) 100px 100px 150px 150px 64px; gap: 8px; align-items: center; padding: 9px 10px; }
 .pricing-header { background: #f3f6fa; color: #526079; font-size: 12px; font-weight: 800; border-bottom: 1px solid #dfe5ef; }
 .pricing-row + .pricing-row { border-top: 1px solid #edf0f5; }
@@ -121,6 +156,8 @@ li { margin-bottom: 7px; }
   .progress-card { grid-template-columns: 1fr; }
   .pricing-heading { flex-direction: column; }
   .pricing-toolbar { justify-content: flex-start; }
+  .section-heading { flex-direction: column; }
+  .ai-draft-field-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 620px) {
@@ -139,4 +176,8 @@ li { margin-bottom: 7px; }
   .gemini-key-row button { width: 100%; }
   .gemini-actions button { flex: 1 1 220px; }
   .ai-result-heading { align-items: flex-start; flex-direction: column; }
+  .recommendation-grid, .ai-draft-columns { grid-template-columns: 1fr; }
+  .guidance-heading, .ai-draft-preview-heading { flex-direction: column; }
+  .ai-draft-button { width: 100%; }
+  .ai-draft-actions button { flex: 1 1 180px; }
 }

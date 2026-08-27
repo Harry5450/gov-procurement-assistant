@@ -3,11 +3,13 @@ import test from 'node:test';
 import {
   GEMINI_FLASH_LATEST_ALIAS,
   analyzeProcurementWithGemini,
+  generateProcurementDraftWithGemini,
   listGeminiModels,
+  parseGeminiProcurementDraft,
   selectLatestStableFlashModel,
   validateGeminiApiKey,
 } from '../src/gemini.ts';
-import { buildSanitizedAIContext } from '../src/privacy.ts';
+import { buildSanitizedAIContext, externalDraftAIGateway } from '../src/privacy.ts';
 
 const apiKey = 'test-secret-api-key';
 
@@ -183,4 +185,143 @@ test('restricted text inside deliverables is blocked by the privacy gate', () =>
     createdAt: new Date(0).toISOString(),
     updatedAt: new Date(0).toISOString(),
   }), /RESTRICTED/);
+});
+
+test('structured draft generation sends only the allowlisted context and never requests prices', async () => {
+  const context = {
+    category: 'service' as const,
+    description: '辦理兩場防災演練並提交成果報告',
+    deliverables: [],
+    paymentTerms: undefined,
+    acceptanceMethod: undefined,
+  };
+
+  const fetchImpl: typeof fetch = async (input, init) => {
+    const url = String(input);
+    const headers = new Headers(init?.headers);
+    const body = String(init?.body);
+    assert.match(url, /models\/gemini-3\.7-flash:generateContent$/);
+    assert.equal(url.includes(apiKey), false);
+    assert.equal(headers.get('x-goog-api-key'), apiKey);
+    assert.equal(body.includes(apiKey), false);
+    assert.equal(body.includes('980000'), false);
+
+    const requestBody = JSON.parse(body) as {
+      generationConfig?: {
+        temperature?: unknown;
+        topP?: unknown;
+        topK?: unknown;
+        responseFormat?: { text?: { mimeType?: string; schema?: Record<string, unknown> } };
+      };
+    };
+    assert.equal(requestBody.generationConfig?.temperature, undefined);
+    assert.equal(requestBody.generationConfig?.topP, undefined);
+    assert.equal(requestBody.generationConfig?.topK, undefined);
+    assert.equal(requestBody.generationConfig?.responseFormat?.text?.mimeType, 'application/json');
+    assert.equal(requestBody.generationConfig?.responseFormat?.text?.schema?.additionalProperties, false);
+    assert.match(body, /不得產生或推算/);
+    assert.match(body, /辦理兩場防災演練/);
+
+    return jsonResponse({
+      candidates: [{
+        content: {
+          parts: [{
+            text: JSON.stringify({
+              paymentTerms: '完成全部成果並驗收合格後付款。',
+              acceptanceMethod: '依契約逐項核對演練紀錄與成果報告。',
+              vendorQualification: '依法設立且營業項目與本案履約內容相關之廠商。',
+              deliverables: ['演練執行紀錄', '成果報告'],
+              pricingItems: [
+                { description: '防災演練', quantity: 2, unit: '場', note: '場次仍須由承辦人確認。' },
+                { description: '成果報告', quantity: 1, unit: '式', note: '' },
+              ],
+              warnings: ['保險種類與額度須由承辦人依風險確認。'],
+            }),
+          }],
+        },
+      }],
+      modelVersion: 'gemini-3.7-flash-001',
+      usageMetadata: { totalTokenCount: 456 },
+    });
+  };
+
+  const result = await generateProcurementDraftWithGemini(
+    context,
+    apiKey,
+    'gemini-3.7-flash',
+    { fetchImpl },
+  );
+  assert.equal(result.resolvedModel, 'gemini-3.7-flash-001');
+  assert.equal(result.totalTokenCount, 456);
+  assert.equal(result.draft.pricingItems[0].quantity, 2);
+  assert.equal('estimatedUnitPrice' in result.draft.pricingItems[0], false);
+});
+
+test('structured draft parser trims and deduplicates safe editable fields', () => {
+  const parsed = parseGeminiProcurementDraft(`\`\`\`json
+  {
+    "paymentTerms": " 驗收合格後付款 ",
+    "acceptanceMethod": "書面及現場驗收",
+    "vendorQualification": "依法設立之相關廠商",
+    "deliverables": ["成果報告", " 成果報告 ", "演練紀錄"],
+    "pricingItems": [
+      {"description":"成果報告","quantity":null,"unit":"式","note":"確認份數"},
+      {"description":" 成果報告 ","quantity":1,"unit":"式","note":"重複"}
+    ],
+    "warnings": []
+  }
+  \`\`\``);
+
+  assert.deepEqual(parsed.deliverables, ['成果報告', '演練紀錄']);
+  assert.equal(parsed.pricingItems.length, 1);
+  assert.equal(parsed.pricingItems[0].quantity, undefined);
+  assert.equal(parsed.paymentTerms, '驗收合格後付款');
+});
+
+test('structured draft parser rejects price fields and invalid quantities', () => {
+  const base = {
+    paymentTerms: '驗收後付款',
+    acceptanceMethod: '書面驗收',
+    vendorQualification: '依法設立之廠商',
+    deliverables: ['成果報告'],
+    warnings: [],
+  };
+  assert.throws(() => parseGeminiProcurementDraft(JSON.stringify({
+    ...base,
+    pricingItems: [{
+      description: '成果報告',
+      quantity: 1,
+      unit: '式',
+      note: '',
+      estimatedUnitPrice: 980000,
+    }],
+  })), /未預期欄位/);
+  assert.throws(() => parseGeminiProcurementDraft(JSON.stringify({
+    ...base,
+    pricingItems: [{ description: '成果報告', quantity: -1, unit: '式', note: '' }],
+  })), /數量不正確/);
+});
+
+test('draft privacy gateway rejects runtime fields outside the explicit allowlist', async () => {
+  let fetched = false;
+  const fetchImpl: typeof fetch = async () => {
+    fetched = true;
+    return jsonResponse({});
+  };
+  const unsafeContext = {
+    category: 'service' as const,
+    description: '辦理教育訓練',
+    deliverables: [],
+    budget: 980000,
+  };
+
+  await assert.rejects(
+    () => externalDraftAIGateway(unsafeContext, {
+      apiKey,
+      model: 'gemini-3.7-flash',
+      fetchImpl,
+    }),
+    /未允許欄位.*budget/,
+  );
+  assert.equal(fetched, false);
 });

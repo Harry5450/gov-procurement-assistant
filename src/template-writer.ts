@@ -37,7 +37,9 @@ function chooseProcurementMethod(value: string) {
 }
 
 function chooseAwardPrinciple(value: string) {
-  if (value.includes('最有利')) return '(2)最有利標';
+  // 「參考／準用最有利標」不是投標須知中可直接等同勾選的正式最有利標。
+  if (value.includes('參考最有利') || value.includes('準用最有利')) return undefined;
+  if (value === '最有利標' || value.startsWith('最有利標（')) return '(2)最有利標';
   if (value.includes('最高')) return '(3)最高標';
   if (value.includes('最低')) return '(1)最低標';
   return undefined;

@@ -8,6 +8,8 @@
     "build": "tsc -b && vite build",
     "build:pages": "tsc -b && vite build --mode github-pages",
     "test:gemini": "node --experimental-strip-types --test scripts/gemini-client.test.ts",
+    "test:rules": "node --experimental-strip-types --test scripts/procurement-guidance.test.ts",
+    "test": "npm run test:gemini && npm run test:rules",
     "preview": "vite preview",
     "pcc:watch": "node scripts/pcc-watcher.mjs",
     "pcc:assets": "node scripts/pcc-assets.mjs",

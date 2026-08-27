@@ -4,12 +4,18 @@ import { deleteCase, listCases, upsertCase } from './db';
 import { exportCaseDocx, exportCaseJson } from './export';
 import { buildAllTemplateMappingPreviews } from './mapping';
 import { completenessScore, evaluateCase } from './rules';
-import { buildSanitizedAIContext, externalAIGateway } from './privacy';
+import { buildSanitizedAIContext, externalAIGateway, externalDraftAIGateway } from './privacy';
 import {
   validateGeminiApiKey,
   type GeminiAnalysisResult,
   type GeminiModelSelection,
+  type GeminiProcurementDraftResult,
 } from './gemini';
+import {
+  buildProcurementGuidance,
+  PROCUREMENT_RULESET,
+  type GuidanceOption,
+} from './procurement-guidance';
 import { formatRocDate, getTemplateArchive, getTemplateObservation, getTemplateSyncStatus, pccTemplateIndex } from './pcc';
 import { templateRegistry } from './templates';
 import { exportTenderInstructionsDraft } from './template-writer';
@@ -69,6 +75,47 @@ function pricingSubtotal(item: PricingItem) {
   return item.quantity * item.estimatedUnitPrice;
 }
 
+function GuidedSelect({
+  label,
+  value,
+  options,
+  recommended,
+  onChange,
+  disabled = false,
+}: {
+  label: string;
+  value: string;
+  options: GuidanceOption[];
+  recommended: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+}) {
+  const selected = options.find((option) => option.value === value);
+  const recommendation = options.find((option) => option.value === recommended);
+  const isLegacyValue = Boolean(value && !selected);
+  const hint = selected ?? recommendation;
+
+  return (
+    <label className="guided-select">
+      <span>{label}</span>
+      <select value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled}>
+        <option value="">{disabled ? '請先完成前置欄位' : recommendation ? `請選擇（建議：${recommendation.label}）` : '請選擇／人工確認'}</option>
+        {isLegacyValue && <option value={value}>目前值：{value}（請重新確認）</option>}
+        {options.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.value === recommended ? '★ ' : ''}{option.label}{option.requiresJustification ? '｜須敘明理由' : ''}
+          </option>
+        ))}
+      </select>
+      {hint && (
+        <small className={selected?.requiresJustification ? 'guided-warning' : ''}>
+          {selected ? '' : '系統建議：'}{hint.description}（{hint.legalBasis}）
+        </small>
+      )}
+    </label>
+  );
+}
+
 export default function App() {
   const [current, setCurrent] = useState<ProcurementCase>(newCase());
   const [cases, setCases] = useState<ProcurementCase[]>([]);
@@ -77,6 +124,13 @@ export default function App() {
   const [geminiApiKey, setGeminiApiKey] = useState('');
   const [geminiSelection, setGeminiSelection] = useState<GeminiModelSelection | null>(null);
   const [geminiResult, setGeminiResult] = useState<GeminiAnalysisResult | null>(null);
+  const [geminiDraft, setGeminiDraft] = useState<{
+    result: GeminiProcurementDraftResult;
+    sourceCaseId: string;
+    sourceUpdatedAt: string;
+  } | null>(null);
+  const [geminiDraftMessage, setGeminiDraftMessage] = useState('');
+  const [geminiDraftHasError, setGeminiDraftHasError] = useState(false);
   const [geminiBusy, setGeminiBusy] = useState(false);
   const [geminiMessage, setGeminiMessage] = useState('');
   const [geminiHasError, setGeminiHasError] = useState(false);
@@ -87,6 +141,24 @@ export default function App() {
   const score = useMemo(() => completenessScore(current), [current]);
   const mappingPreviews = useMemo(() => buildAllTemplateMappingPreviews(current), [current]);
   const preflight = useMemo(() => buildCrossDocumentConsistencyReport(current), [current]);
+  const procurementGuidance = useMemo(() => buildProcurementGuidance({
+    budget: current.budget,
+    category: current.category,
+    procurementMethod: current.procurementMethod,
+    awardPrinciple: current.awardPrinciple,
+    awardMethod: current.awardMethod,
+    contractPriceMethod: current.contractPriceMethod,
+  }), [
+    current.budget,
+    current.category,
+    current.procurementMethod,
+    current.awardPrinciple,
+    current.awardMethod,
+    current.contractPriceMethod,
+  ]);
+  const geminiDraftIsStale = Boolean(geminiDraft && (
+    geminiDraft.sourceCaseId !== current.id || geminiDraft.sourceUpdatedAt !== current.updatedAt
+  ));
   const pricingItems = current.pricingItems ?? [];
   const internalEstimateTotal = useMemo(
     () => (current.pricingItems ?? []).reduce((sum, item) => sum + (pricingSubtotal(item) ?? 0), 0),
@@ -190,6 +262,9 @@ export default function App() {
     setGeminiApiKey(value);
     setGeminiSelection(null);
     setGeminiResult(null);
+    setGeminiDraft(null);
+    setGeminiDraftMessage('');
+    setGeminiDraftHasError(false);
     setGeminiMessage('');
     setGeminiHasError(false);
     setGeminiBusy(false);
@@ -282,6 +357,105 @@ export default function App() {
         setGeminiBusy(false);
       }
     }
+  }
+
+  async function generateEditableProcurementDraft() {
+    if (!geminiSelection) {
+      setGeminiDraftHasError(true);
+      setGeminiDraftMessage('請先在「4. 機敏資料控管」驗證 Gemini API Key。');
+      return;
+    }
+    if (current.category === 'unknown' || !current.description.trim()) {
+      setGeminiDraftHasError(true);
+      setGeminiDraftMessage('請先填寫採購類型與採購需求，Gemini 才能起草履約內容。');
+      return;
+    }
+
+    let context: ReturnType<typeof buildSanitizedAIContext>;
+    try {
+      context = buildSanitizedAIContext(current);
+    } catch (error) {
+      setGeminiDraftHasError(true);
+      setGeminiDraftMessage(error instanceof Error ? error.message : '此案件禁止使用外部 AI。');
+      return;
+    }
+
+    const sourceCaseId = current.id;
+    const sourceUpdatedAt = current.updatedAt;
+    geminiAbortRef.current?.abort();
+    const controller = new AbortController();
+    geminiAbortRef.current = controller;
+    setGeminiBusy(true);
+    setGeminiDraftHasError(false);
+    setGeminiDraft(null);
+    setGeminiDraftMessage(`正在使用 ${geminiSelection.selectedModel} 產生履約與標價項目草稿…`);
+
+    try {
+      const result = await externalDraftAIGateway(context, {
+        apiKey: geminiApiKey,
+        model: geminiSelection.selectedModel,
+        signal: controller.signal,
+      });
+      if (geminiAbortRef.current !== controller) return;
+      setGeminiDraft({ result, sourceCaseId, sourceUpdatedAt });
+      setGeminiDraftMessage(
+        `草稿已產生；實際模型：${result.resolvedModel}${result.totalTokenCount ? `，共 ${result.totalTokenCount.toLocaleString('zh-TW')} tokens` : ''}。請先檢查，再套用到空白欄位。`,
+      );
+    } catch (error) {
+      if (geminiAbortRef.current !== controller) return;
+      setGeminiDraftHasError(true);
+      setGeminiDraftMessage(error instanceof Error ? error.message : 'Gemini 履約草稿產生失敗。');
+    } finally {
+      if (geminiAbortRef.current === controller) {
+        geminiAbortRef.current = null;
+        setGeminiBusy(false);
+      }
+    }
+  }
+
+  function applyGeminiDraftToBlankFields() {
+    if (!geminiDraft) return;
+    if (geminiDraftIsStale) {
+      setGeminiDraftHasError(true);
+      setGeminiDraftMessage('案件內容在草稿產生後已變更。為避免套用過期內容，請重新產生草稿。');
+      return;
+    }
+
+    const draft = geminiDraft.result.draft;
+    const applied: string[] = [];
+    if (!current.paymentTerms.trim() && draft.paymentTerms) applied.push('付款條件');
+    if (!current.acceptanceMethod.trim() && draft.acceptanceMethod) applied.push('驗收方式');
+    if (!current.vendorQualification.trim() && draft.vendorQualification) applied.push('廠商資格');
+    if (!current.deliverables.length && draft.deliverables.length) applied.push('主要交付成果');
+    if (!(current.pricingItems ?? []).length && draft.pricingItems.length) applied.push('標價清單工作項目');
+
+    if (!applied.length) {
+      setGeminiDraftHasError(false);
+      setGeminiDraftMessage('本區欄位已有內容，因此沒有覆蓋任何資料；你仍可參考草稿後手動修改。');
+      return;
+    }
+
+    setSaved(false);
+    setTemplateWriteStatus('');
+    setCurrent((prev) => ({
+      ...prev,
+      paymentTerms: prev.paymentTerms.trim() ? prev.paymentTerms : draft.paymentTerms,
+      acceptanceMethod: prev.acceptanceMethod.trim() ? prev.acceptanceMethod : draft.acceptanceMethod,
+      vendorQualification: prev.vendorQualification.trim() ? prev.vendorQualification : draft.vendorQualification,
+      deliverables: prev.deliverables.length ? prev.deliverables : [...draft.deliverables],
+      pricingItems: (prev.pricingItems ?? []).length
+        ? prev.pricingItems
+        : draft.pricingItems.map((item) => ({
+          id: crypto.randomUUID(),
+          description: item.description,
+          quantity: item.quantity,
+          unit: item.unit,
+        })),
+      updatedAt: new Date().toISOString(),
+    }));
+    setGeminiDraft(null);
+    setGeminiDraftHasError(false);
+    setGeminiDraftMessage(`已套用：${applied.join('、')}。既有內容未覆蓋；預估單價仍由承辦人依市場資料填寫。`);
   }
 
   async function exportTenderDraft() {
@@ -417,19 +591,90 @@ export default function App() {
 
           <div className="card">
             <h2>2. 招標與決標設定</h2>
-            <p className="muted">這些欄位會映射到投標須知與契約；系統只維持跨文件一致，不自動替承辦人判斷法定招標或決標方式。</p>
+            <p className="muted">系統依金額級距與所選程序縮小後續選項，提供法源與建議；最終仍由承辦人依案件性質、機關層級及核准程序確認。</p>
+
+            <div className="procurement-guidance">
+              <div className="guidance-heading">
+                <div>
+                  <span className="eyebrow">規則版本：{PROCUREMENT_RULESET.effectiveFrom} 生效 · {PROCUREMENT_RULESET.verifiedOn} 核對</span>
+                  <h3>{procurementGuidance.bandLabel}</h3>
+                  <p>{procurementGuidance.bandSummary}</p>
+                </div>
+                <span className={`tag ${procurementGuidance.band === 'unset' ? 'untracked' : 'current'}`}>
+                  {procurementGuidance.band === 'unset' ? '待填金額' : '已判斷級距'}
+                </span>
+              </div>
+              <div className="recommendation-grid">
+                <div><small>建議招標方式</small><strong>{procurementGuidance.recommended.procurementMethod || '待判斷'}</strong><p>{procurementGuidance.recommended.procurementMethodReason}</p></div>
+                <div><small>建議決標原則</small><strong>{procurementGuidance.recommended.awardPrinciple || '須人工判斷'}</strong><p>{procurementGuidance.recommended.awardPrincipleReason}</p></div>
+                <div><small>建議決標方式</small><strong>{procurementGuidance.recommended.awardMethod}</strong><p>{procurementGuidance.recommended.awardMethodReason}</p></div>
+                <div><small>建議價金計算</small><strong>{procurementGuidance.recommended.contractPriceMethod || '待選採購類型'}</strong><p>{procurementGuidance.recommended.contractPriceMethodReason}</p></div>
+              </div>
+              <ul className="guidance-warnings">
+                {procurementGuidance.warnings.map((warning) => <li key={warning}>{warning}</li>)}
+              </ul>
+              <p className="guidance-sources">
+                官方依據：
+                <a href={PROCUREMENT_RULESET.sources.thresholds} target="_blank" rel="noreferrer">採購金額門檻公告</a>
+                <span>·</span>
+                <a href={PROCUREMENT_RULESET.sources.procurementAct} target="_blank" rel="noreferrer">政府採購法</a>
+                <span>·</span>
+                <a href={PROCUREMENT_RULESET.sources.belowAnnouncementRules} target="_blank" rel="noreferrer">中央機關未達公告金額採購招標辦法</a>
+              </p>
+            </div>
+
             <div className="form-grid">
-              <label>招標方式<input value={current.procurementMethod ?? ''} onChange={(e) => patch('procurementMethod', e.target.value)} placeholder="例如：公開招標／公開取得報價或企劃書" /></label>
-              <label>決標原則<input value={current.awardPrinciple ?? ''} onChange={(e) => patch('awardPrinciple', e.target.value)} placeholder="例如：最低標／最有利標" /></label>
-              <label>決標方式<input value={current.awardMethod ?? ''} onChange={(e) => patch('awardMethod', e.target.value)} placeholder="例如：總價決標" /></label>
-              <label>契約價金計算方式<input value={current.contractPriceMethod ?? ''} onChange={(e) => patch('contractPriceMethod', e.target.value)} placeholder="例如：總包價法／單價計算法" /></label>
+              <GuidedSelect
+                label="招標方式"
+                value={current.procurementMethod ?? ''}
+                options={procurementGuidance.methodOptions}
+                recommended={procurementGuidance.recommended.procurementMethod}
+                onChange={(value) => patch('procurementMethod', value)}
+                disabled={procurementGuidance.band === 'unset'}
+              />
+              <GuidedSelect
+                label="決標原則"
+                value={current.awardPrinciple ?? ''}
+                options={procurementGuidance.awardPrincipleOptions}
+                recommended={procurementGuidance.recommended.awardPrinciple}
+                onChange={(value) => patch('awardPrinciple', value)}
+                disabled={!current.procurementMethod}
+              />
+              <GuidedSelect
+                label="決標方式"
+                value={current.awardMethod ?? ''}
+                options={procurementGuidance.awardMethodOptions}
+                recommended={procurementGuidance.recommended.awardMethod}
+                onChange={(value) => patch('awardMethod', value)}
+                disabled={!current.awardPrinciple}
+              />
+              <GuidedSelect
+                label="契約價金計算方式"
+                value={current.contractPriceMethod ?? ''}
+                options={procurementGuidance.contractPriceMethodOptions}
+                recommended={procurementGuidance.recommended.contractPriceMethod}
+                onChange={(value) => patch('contractPriceMethod', value)}
+                disabled={current.category === 'unknown'}
+              />
               <label>押標金<input value={current.bidBond ?? ''} onChange={(e) => patch('bidBond', e.target.value)} placeholder="例如：免收／一定金額 30,000 元" /></label>
               <label>履約保證金<input value={current.performanceBond ?? ''} onChange={(e) => patch('performanceBond', e.target.value)} placeholder="例如：免收／契約金額 10%" /></label>
             </div>
           </div>
 
           <div className="card">
-            <h2>3. 履約、驗收與資格</h2>
+            <div className="section-heading">
+              <div>
+                <h2>3. 履約、驗收與資格</h2>
+                <p className="muted">Gemini 可依採購需求產生可編輯草稿；先預覽、再套用到空白欄位，不會覆蓋既有內容。</p>
+              </div>
+              <button className="ai-draft-button" disabled={geminiBusy} onClick={() => void generateEditableProcurementDraft()}>
+                {geminiBusy ? 'Gemini 處理中…' : '✨ AI 產生履約與標價草稿'}
+              </button>
+            </div>
+            <p className="ai-draft-safety">
+              {geminiSelection ? `已連線 ${geminiSelection.selectedModel}` : '尚未驗證 Gemini Key；可先填需求，再到第4節驗證。'}
+              <span>AI 不會產生底價、預估單價、保額或法定招決標選項。</span>
+            </p>
             <div className="form-grid">
               <label>付款條件<input value={current.paymentTerms} onChange={(e) => patch('paymentTerms', e.target.value)} placeholder="例如：每季驗收合格後付款" /></label>
               <label>驗收方式<input value={current.acceptanceMethod} onChange={(e) => patch('acceptanceMethod', e.target.value)} placeholder="例如：成果報告＋功能測試" /></label>
@@ -437,11 +682,63 @@ export default function App() {
             <label>廠商資格<textarea rows={3} value={current.vendorQualification} onChange={(e) => patch('vendorQualification', e.target.value)} placeholder="尚未確認可先留白，系統會列入人工確認。" /></label>
             <label>主要交付成果<textarea rows={3} value={current.deliverables.join('\n')} onChange={(e) => patch('deliverables', e.target.value.split('\n').map((v) => v.trim()).filter(Boolean))} placeholder={'每行一項，例如：\n每月維護報告\n系統備份紀錄'} /></label>
 
+            {geminiDraftMessage && (
+              <p className={`gemini-status ${geminiDraftHasError ? 'error' : geminiDraft ? 'success' : ''}`} role="status">
+                {geminiDraftMessage}
+              </p>
+            )}
+
+            {geminiDraft && (
+              <div className={`ai-draft-preview ${geminiDraftIsStale ? 'stale' : ''}`}>
+                <div className="ai-draft-preview-heading">
+                  <div>
+                    <h3>Gemini 履約草稿</h3>
+                    <p>{geminiDraft.result.requestedModel} → {geminiDraft.result.resolvedModel}</p>
+                  </div>
+                  <span className={`tag ${geminiDraftIsStale ? 'candidate' : 'current'}`}>{geminiDraftIsStale ? '案件已變更' : '待人工套用'}</span>
+                </div>
+                {geminiDraftIsStale && <div className="notice warning">案件內容已在草稿產生後變更；請重新產生，避免套用過期建議。</div>}
+                <div className="ai-draft-field-grid">
+                  <div><strong>付款條件</strong><p>{geminiDraft.result.draft.paymentTerms || '未提供'}</p></div>
+                  <div><strong>驗收方式</strong><p>{geminiDraft.result.draft.acceptanceMethod || '未提供'}</p></div>
+                  <div><strong>廠商資格</strong><p>{geminiDraft.result.draft.vendorQualification || '未提供'}</p></div>
+                </div>
+                <div className="ai-draft-columns">
+                  <div>
+                    <strong>主要交付成果</strong>
+                    <ol>{geminiDraft.result.draft.deliverables.map((item) => <li key={item}>{item}</li>)}</ol>
+                  </div>
+                  <div>
+                    <strong>標價清單工作項目</strong>
+                    <div className="draft-pricing-list">
+                      {geminiDraft.result.draft.pricingItems.map((item, index) => (
+                        <div key={`${item.description}-${index}`}>
+                          <span>{index + 1}. {item.description}</span>
+                          <small>{item.quantity ?? '待填'} {item.unit || '單位待填'}{item.note ? ` · ${item.note}` : ''}</small>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                {geminiDraft.result.draft.warnings.length > 0 && (
+                  <div className="notice warning">
+                    <strong>AI 標記的待確認事項</strong>
+                    <ul>{geminiDraft.result.draft.warnings.map((warning) => <li key={warning}>{warning}</li>)}</ul>
+                  </div>
+                )}
+                <div className="ai-draft-actions">
+                  <button disabled={geminiDraftIsStale} onClick={applyGeminiDraftToBlankFields}>套用到空白欄位</button>
+                  <button className="secondary" onClick={() => { setGeminiDraft(null); setGeminiDraftMessage('已取消本次 AI 草稿。'); setGeminiDraftHasError(false); }}>取消草稿</button>
+                </div>
+                <p className="ai-disclaimer">套用後仍是一般表單欄位，可由使用者逐項修改；既有欄位與內部預估單價不會被覆蓋。</p>
+              </div>
+            )}
+
             <div className="pricing-section">
               <div className="pricing-heading">
                 <div>
                   <h3>標價清單工作項目</h3>
-                  <p className="muted">可由交付成果建立項目，但系統不會自行猜測數量、單位或價格。預估單價屬內部試算，對外 XLSX 不會帶出。</p>
+                  <p className="muted">可由交付成果或 AI 草稿建立項目；AI 建議的數量與單位須人工確認。預估單價屬內部市場調查，不會外送 AI，也不會帶入對外 XLSX。</p>
                 </div>
                 <div className="pricing-toolbar">
                   <button className="secondary" onClick={syncDeliverablesToPricing}>從交付成果建立</button>

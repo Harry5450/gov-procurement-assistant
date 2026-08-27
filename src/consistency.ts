@@ -1,4 +1,5 @@
 import { buildAllTemplateMappingPreviews } from './mapping';
+import { buildProcurementGuidance, isGuidanceOptionValue } from './procurement-guidance';
 import type { PricingItem, ProcurementCase } from './types';
 
 export type ConsistencyStatus = 'pass' | 'warning' | 'blocker';
@@ -86,6 +87,15 @@ export function buildCrossDocumentConsistencyReport(procurementCase: Procurement
   const mappingPreviews = buildAllTemplateMappingPreviews(procurementCase);
   const tenderPreview = mappingPreviews.find((item) => item.templateId === 'tender-instructions');
   const servicePreview = mappingPreviews.find((item) => item.templateId === 'service-contract');
+  const guidance = buildProcurementGuidance(procurementCase);
+  const validProcurementMethod = isGuidanceOptionValue(procurementCase.procurementMethod, guidance.methodOptions);
+  const validAwardPrinciple = validProcurementMethod
+    && isGuidanceOptionValue(procurementCase.awardPrinciple, guidance.awardPrincipleOptions);
+  const validAwardMethod = isGuidanceOptionValue(procurementCase.awardMethod, guidance.awardMethodOptions);
+  const validContractPriceMethod = isGuidanceOptionValue(
+    procurementCase.contractPriceMethod,
+    guidance.contractPriceMethodOptions,
+  );
 
   const isService = procurementCase.category === 'service';
   pushCheck(
@@ -116,6 +126,23 @@ export function buildCrossDocumentConsistencyReport(procurementCase: Procurement
     budgetReady ? `案件預算為新臺幣 ${Math.round(procurementCase.budget).toLocaleString('zh-TW')} 元。` : '尚未填寫有效預算金額。',
     ['tender-instructions', 'service-requirements'],
   );
+
+  const invalidGuidedSelections = [
+    [procurementCase.procurementMethod, validProcurementMethod, '招標方式'],
+    [procurementCase.awardPrinciple, validAwardPrinciple, '決標原則'],
+    [procurementCase.awardMethod, validAwardMethod, '決標方式'],
+    [procurementCase.contractPriceMethod, validContractPriceMethod, '契約價金計算方式'],
+  ].filter(([value, valid]) => hasText(String(value ?? '')) && !valid);
+  if (invalidGuidedSelections.length) {
+    pushCheck(
+      checks,
+      'guided-selection-validity',
+      '採購程序關聯選項',
+      'blocker',
+      `下列欄位不符合目前金額、採購類型或前置選項：${invalidGuidedSelections.map((item) => item[2]).join('、')}。請從關聯下拉選單重新確認。`,
+      ['tender-instructions', 'service-contract'],
+    );
+  }
 
   const periodReady = Boolean(procurementCase.contractStart && procurementCase.contractEnd);
   const periodOrdered = !periodReady || procurementCase.contractStart! <= procurementCase.contractEnd!;
@@ -303,16 +330,16 @@ export function buildCrossDocumentConsistencyReport(procurementCase: Procurement
       ['標案名稱', hasText(procurementCase.title)],
       ['採購類型', procurementCase.category !== 'unknown'],
       ['預算金額', budgetReady],
-      ['招標方式', hasText(procurementCase.procurementMethod)],
-      ['決標原則', hasText(procurementCase.awardPrinciple)],
-      ['決標方式', hasText(procurementCase.awardMethod)],
+      ['招標方式', validProcurementMethod],
+      ['決標原則', validAwardPrinciple],
+      ['決標方式', validAwardMethod],
       ['廠商資格', hasText(procurementCase.vendorQualification)],
     ]),
     readiness('service-contract', '勞務採購契約', [
       ['招標機關', hasText(procurementCase.agency)],
       ['履約標的', descriptionReady],
       ['交付成果', deliverables.length > 0],
-      ['契約價金計算方式', hasText(procurementCase.contractPriceMethod)],
+      ['契約價金計算方式', validContractPriceMethod],
       ['付款條件', paymentReady],
       ['履約期間', periodReady && periodOrdered],
       ['驗收方式', acceptanceReady],
