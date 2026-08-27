@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:pages": "tsc -b && vite build --mode github-pages",
     "preview": "vite preview",
     "pcc:watch": "node scripts/pcc-watcher.mjs",
     "pcc:assets": "node scripts/pcc-assets.mjs",
@@ -14,20 +15,20 @@
     "template:smoke": "node scripts/template-writer-smoke.mjs"
   },
   "dependencies": {
-    "@vitejs/plugin-react": "latest",
-    "dexie": "latest",
-    "docx": "latest",
+    "@vitejs/plugin-react": "6.1.0",
+    "dexie": "4.4.5",
+    "docx": "9.7.1",
     "exceljs": "4.4.0",
-    "fflate": "latest",
-    "file-saver": "latest",
-    "vite": "latest",
-    "react": "latest",
-    "react-dom": "latest"
+    "fflate": "0.8.3",
+    "file-saver": "2.0.5",
+    "vite": "8.2.2",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
   },
   "devDependencies": {
-    "@types/file-saver": "latest",
-    "@types/react": "latest",
-    "@types/react-dom": "latest",
-    "typescript": "latest"
+    "@types/file-saver": "2.0.7",
+    "@types/react": "19.2.18",
+    "@types/react-dom": "19.2.5",
+    "typescript": "7.0.2"
   }
 }

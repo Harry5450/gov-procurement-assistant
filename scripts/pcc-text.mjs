@@ -116,7 +116,8 @@ async function writeImmutableText(path, content) {
   const absolutePath = resolve(path);
   if (await exists(absolutePath)) {
     const existing = await readFile(absolutePath, 'utf8');
-    if (existing !== content) {
+    const normalizedExisting = existing.replace(/\r\n?/g, '\n');
+    if (normalizedExisting !== content) {
       throw new Error(`Immutable normalized-text violation: ${path} already exists with different content.`);
     }
     return;

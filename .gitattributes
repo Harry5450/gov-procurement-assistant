@@ -3,3 +3,6 @@ official-templates/** binary
 *.docx binary
 *.odt binary
 *.pdf binary
+
+# Deterministic PCC text snapshots must compare identically on every OS.
+src/data/pcc-template-text/** text eol=lf

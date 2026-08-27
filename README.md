@@ -210,6 +210,29 @@ Watcher 每週一至週五自動執行，也可從 GitHub Actions 手動執行�
 
 https://www.pcc.gov.tw/content/index?eid=10146&lang=1&type=C
 
+## GitHub Pages 公開 Beta
+
+本專案可部署為 `https://harry5450.github.io/gov-procurement-assistant/`。Pages 版本只定位為公開 Beta，請勿輸入正式機敏採購資料。
+
+1. 在 GitHub repository 的 **Settings → Pages**，將 Source 設為 **GitHub Actions**。
+2. 合併或 push 到 `main` 後，CI 會先執行 PCC 文字驗證、範本 Anchor audit、Writer smoke test 與 Pages production build。
+3. 驗證全部通過後，`deploy` job 才會發布 `dist/`。
+
+本機驗證 Pages 子路徑建置：
+
+```bash
+npm ci
+npm run build:pages
+```
+
+一般本機開發仍使用根路徑：
+
+```bash
+npm run dev
+```
+
+案件只儲存在目前瀏覽器的 IndexedDB；清除網站資料、使用無痕模式或更換裝置都可能造成案件遺失。GitHub Pages 不提供帳號登入、集中備份或機關內部存取控制。
+
 ---
 
 Private MVP — 尚未開放一般使用者正式辦理採購案件。
