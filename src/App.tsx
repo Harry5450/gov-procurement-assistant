@@ -1,10 +1,15 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { buildCrossDocumentConsistencyReport } from './consistency';
 import { deleteCase, listCases, upsertCase } from './db';
 import { exportCaseDocx, exportCaseJson } from './export';
 import { buildAllTemplateMappingPreviews } from './mapping';
 import { completenessScore, evaluateCase } from './rules';
-import { buildSanitizedAIContext } from './privacy';
+import { buildSanitizedAIContext, externalAIGateway } from './privacy';
+import {
+  validateGeminiApiKey,
+  type GeminiAnalysisResult,
+  type GeminiModelSelection,
+} from './gemini';
 import { formatRocDate, getTemplateArchive, getTemplateObservation, getTemplateSyncStatus, pccTemplateIndex } from './pcc';
 import { templateRegistry } from './templates';
 import { exportTenderInstructionsDraft } from './template-writer';
@@ -69,7 +74,14 @@ export default function App() {
   const [cases, setCases] = useState<ProcurementCase[]>([]);
   const [saved, setSaved] = useState(false);
   const [aiPreview, setAiPreview] = useState('');
+  const [geminiApiKey, setGeminiApiKey] = useState('');
+  const [geminiSelection, setGeminiSelection] = useState<GeminiModelSelection | null>(null);
+  const [geminiResult, setGeminiResult] = useState<GeminiAnalysisResult | null>(null);
+  const [geminiBusy, setGeminiBusy] = useState(false);
+  const [geminiMessage, setGeminiMessage] = useState('');
+  const [geminiHasError, setGeminiHasError] = useState(false);
   const [templateWriteStatus, setTemplateWriteStatus] = useState('');
+  const geminiAbortRef = useRef<AbortController | null>(null);
 
   const rules = useMemo(() => evaluateCase(current), [current]);
   const score = useMemo(() => completenessScore(current), [current]);
@@ -88,6 +100,8 @@ export default function App() {
   useEffect(() => {
     void refresh();
   }, []);
+
+  useEffect(() => () => geminiAbortRef.current?.abort(), []);
 
   function patch<K extends keyof ProcurementCase>(key: K, value: ProcurementCase[K]) {
     setSaved(false);
@@ -167,6 +181,106 @@ export default function App() {
       setAiPreview(JSON.stringify(context, null, 2));
     } catch (error) {
       setAiPreview(error instanceof Error ? error.message : '無法建立 AI 外送內容');
+    }
+  }
+
+  function changeGeminiApiKey(value: string) {
+    geminiAbortRef.current?.abort();
+    geminiAbortRef.current = null;
+    setGeminiApiKey(value);
+    setGeminiSelection(null);
+    setGeminiResult(null);
+    setGeminiMessage('');
+    setGeminiHasError(false);
+    setGeminiBusy(false);
+  }
+
+  function clearGeminiApiKey() {
+    changeGeminiApiKey('');
+    setAiPreview('');
+  }
+
+  async function verifyGeminiApiKey() {
+    if (!geminiApiKey.trim()) {
+      setGeminiHasError(true);
+      setGeminiMessage('請先輸入 Gemini API Key。');
+      return;
+    }
+
+    geminiAbortRef.current?.abort();
+    const controller = new AbortController();
+    geminiAbortRef.current = controller;
+    setGeminiBusy(true);
+    setGeminiHasError(false);
+    setGeminiMessage('正在向 Google 驗證 API Key 並取得可用模型…');
+
+    try {
+      const selection = await validateGeminiApiKey(geminiApiKey, { signal: controller.signal });
+      if (geminiAbortRef.current !== controller) return;
+      setGeminiSelection(selection);
+      setGeminiMessage(
+        selection.usedAliasFallback
+          ? `API Key 已驗證；模型清單無法辨識穩定版本，將使用官方別名 ${selection.selectedModel}。`
+          : `API Key 已驗證；已自動選擇最新穩定 Flash：${selection.selectedModel}。`,
+      );
+    } catch (error) {
+      if (geminiAbortRef.current !== controller) return;
+      setGeminiSelection(null);
+      setGeminiHasError(true);
+      setGeminiMessage(error instanceof Error ? error.message : 'Gemini API Key 驗證失敗。');
+    } finally {
+      if (geminiAbortRef.current === controller) {
+        geminiAbortRef.current = null;
+        setGeminiBusy(false);
+      }
+    }
+  }
+
+  async function analyzeCurrentCaseWithGemini() {
+    if (!geminiSelection) {
+      setGeminiHasError(true);
+      setGeminiMessage('請先驗證 Gemini API Key。');
+      return;
+    }
+
+    let context: ReturnType<typeof buildSanitizedAIContext>;
+    try {
+      // Privacy gate runs before creating the request or contacting Google.
+      context = buildSanitizedAIContext(current);
+    } catch (error) {
+      setGeminiHasError(true);
+      setGeminiMessage(error instanceof Error ? error.message : '此案件禁止使用外部 AI。');
+      return;
+    }
+
+    geminiAbortRef.current?.abort();
+    const controller = new AbortController();
+    geminiAbortRef.current = controller;
+    setGeminiBusy(true);
+    setGeminiHasError(false);
+    setGeminiResult(null);
+    setGeminiMessage(`正在使用 ${geminiSelection.selectedModel} 分析已去敏感案件資料…`);
+
+    try {
+      const result = await externalAIGateway(context, {
+        apiKey: geminiApiKey,
+        model: geminiSelection.selectedModel,
+        signal: controller.signal,
+      });
+      if (geminiAbortRef.current !== controller) return;
+      setGeminiResult(result);
+      setGeminiMessage(
+        `分析完成；實際模型：${result.resolvedModel}${result.totalTokenCount ? `，共 ${result.totalTokenCount.toLocaleString('zh-TW')} tokens` : ''}。`,
+      );
+    } catch (error) {
+      if (geminiAbortRef.current !== controller) return;
+      setGeminiHasError(true);
+      setGeminiMessage(error instanceof Error ? error.message : 'Gemini 分析失敗。');
+    } finally {
+      if (geminiAbortRef.current === controller) {
+        geminiAbortRef.current = null;
+        setGeminiBusy(false);
+      }
     }
   }
 
@@ -250,7 +364,9 @@ export default function App() {
           <h1>公務採購文件智慧助理</h1>
           <p className="subtitle">Local-first：案件內容預設只存在這台裝置的瀏覽器，不上傳伺服器。</p>
         </div>
-        <div className="privacy-badge">🔒 AI 外送預設關閉</div>
+        <div className={`privacy-badge ${geminiSelection ? 'ai-enabled' : ''}`}>
+          {geminiSelection ? `✨ Gemini 已就緒 · ${geminiSelection.selectedModel}` : '🔒 AI 外送需使用者 API Key'}
+        </div>
       </header>
 
       <main className="layout">
@@ -381,8 +497,82 @@ export default function App() {
               <label>底價／預估底價（高度敏感）<input type="number" value={current.reservePrice ?? ''} onChange={(e) => patch('reservePrice', e.target.value ? Number(e.target.value) : undefined)} placeholder="如有填寫，禁止外送 LLM" /></label>
             </div>
             <label>內部備註<textarea rows={3} value={current.internalNotes} onChange={(e) => patch('internalNotes', e.target.value)} placeholder="此欄永遠不納入 AI 外送內容。" /></label>
-            <button className="secondary" onClick={previewAI}>預覽「若啟用 AI」可外送內容</button>
-            {aiPreview && <pre className="preview">{aiPreview}</pre>}
+
+            <div className="gemini-panel">
+              <div className="gemini-heading">
+                <div>
+                  <h3>Gemini AI（使用者自備 Key）</h3>
+                  <p className="muted">系統會從 Google 模型清單自動選擇最新穩定的文字 Flash；若命名規則改變，才改用官方 latest 別名。</p>
+                </div>
+                <span className={`tag ${geminiSelection ? 'current' : 'untracked'}`}>
+                  {geminiSelection ? '已驗證' : '未連線'}
+                </span>
+              </div>
+
+              <div className="gemini-key-row">
+                <label>
+                  Gemini API Key
+                  <input
+                    type="password"
+                    value={geminiApiKey}
+                    onChange={(event) => changeGeminiApiKey(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' && !geminiBusy) void verifyGeminiApiKey();
+                    }}
+                    autoComplete="off"
+                    spellCheck={false}
+                    placeholder="貼上 Google AI Studio API Key"
+                    aria-describedby="gemini-key-notice"
+                  />
+                </label>
+                <button disabled={geminiBusy || !geminiApiKey.trim()} onClick={() => void verifyGeminiApiKey()}>
+                  {geminiBusy ? '處理中…' : '驗證 Key'}
+                </button>
+                <button className="secondary" disabled={!geminiApiKey && !geminiSelection} onClick={clearGeminiApiKey}>清除</button>
+              </div>
+
+              <p id="gemini-key-notice" className="gemini-key-notice">
+                Key 只保留在目前頁面的記憶體，重新整理就會清除；不會寫入案件、IndexedDB、GitHub、網址或匯出文件。
+                GitHub Pages 會從瀏覽器直接連到 Google，請使用專用且受限制的 Key。
+              </p>
+              <p className="gemini-links">
+                <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer">取得 Gemini API Key</a>
+                <span>·</span>
+                <a href="https://ai.google.dev/gemini-api/docs/api-key" target="_blank" rel="noreferrer">Google Key 安全說明</a>
+              </p>
+
+              <div className="gemini-actions">
+                <button className="secondary" onClick={previewAI}>預覽將外送的去敏感資料</button>
+                <button
+                  disabled={geminiBusy || !geminiSelection}
+                  onClick={() => void analyzeCurrentCaseWithGemini()}
+                >
+                  {geminiBusy ? 'Gemini 處理中…' : '使用 Gemini 檢查案件缺漏'}
+                </button>
+              </div>
+
+              {geminiMessage && (
+                <p className={`gemini-status ${geminiHasError ? 'error' : geminiSelection ? 'success' : ''}`} role="status">
+                  {geminiMessage}
+                </p>
+              )}
+              {aiPreview && (
+                <div className="ai-output-block">
+                  <strong>實際外送資料預覽</strong>
+                  <pre className="preview">{aiPreview}</pre>
+                </div>
+              )}
+              {geminiResult && (
+                <div className="ai-output-block">
+                  <div className="ai-result-heading">
+                    <strong>Gemini 檢核建議</strong>
+                    <small>{geminiResult.requestedModel} → {geminiResult.resolvedModel}</small>
+                  </div>
+                  <div className="ai-result">{geminiResult.text}</div>
+                  <p className="ai-disclaimer">AI 結果只供審查，不會自動改寫案件欄位或決定法定採購選項。</p>
+                </div>
+              )}
+            </div>
           </div>
 
           <div className="card">

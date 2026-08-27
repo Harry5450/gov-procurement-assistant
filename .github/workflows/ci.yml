@@ -35,6 +35,7 @@ jobs:
       - run: npm run pcc:text -- --dry-run
       - run: npm run template:anchors
       - run: npm run template:smoke
+      - run: npm run test:gemini
       - run: npm run build:pages
       - name: Configure GitHub Pages
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'

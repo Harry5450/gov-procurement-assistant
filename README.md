@@ -8,7 +8,7 @@ Local-first 的公務採購文件輔助系統。目標是讓一般承辦人從�
 
 1. **Local-first**：案件資料預設存於瀏覽器 IndexedDB。
 2. **Server 不保存案件內容**：MVP 無案件後端資料庫。
-3. **AI 預設關閉**：外部 AI Gateway 目前直接拒絕呼叫。
+3. **AI 明確選擇加入**：使用者自行輸入 Gemini API Key 並驗證後才會啟用；Key 不進案件資料或持久化儲存。
 4. **敏感資料不可外送**：底價、評選委員、議價、內部簽核等 RESTRICTED 資料硬性阻擋。
 5. **規則優先於 Prompt**：文件清單、版本比對、Mapping 與檢核均採 deterministic workflow。
 6. **官方範本不可覆寫**：PCC Watcher 只產生 candidate；人工核准後才可更新 active Registry。
@@ -25,6 +25,9 @@ Local-first 的公務採購文件輔助系統。目標是讓一般承辦人從�
 - Security Level：PUBLIC / INTERNAL / SENSITIVE / RESTRICTED
 - Privacy Gateway 與敏感內容偵測
 - 預覽「若啟用 AI」實際可外送的去敏感內容
+- 使用者自備 Gemini API Key（僅保留在目前頁面記憶體）
+- 由 Gemini Models API 自動選擇最新穩定文字 Flash，命名無法辨識時改用官方 latest 別名
+- Gemini 案件缺漏檢核（只回傳建議，不自動修改案件或法定選項）
 - 工程會 active Template Registry
 - PCC 官方索引快照與版本日期比對
 - PCC 核心範本 detail page 解析
@@ -180,10 +183,11 @@ Watcher 每週一至週五自動執行，也可從 GitHub Actions 手動執行�
 - [ ] 驗收與保固規則
 
 ### Phase 3 — Privacy-first AI Assist
-- [ ] 管理者 Provider 設定
-- [ ] Local DLP Scanner
+- [x] 使用者自備 Gemini API Key
+- [x] Gemini 最新穩定 Flash 自動探索與 latest alias fallback
+- [x] Local DLP Scanner（白名單 context＋敏感詞阻擋）
 - [ ] Placeholder tokenization
-- [ ] AI 外送內容逐次預覽
+- [x] AI 外送內容逐次預覽
 - [ ] Audit log（不保存原始機敏內容）
 
 ### Phase 4 — 全國通用
@@ -192,10 +196,20 @@ Watcher 每週一至週五自動執行，也可從 GitHub Actions 手動執行�
 - [ ] 資訊服務／技術服務／評選文件
 - [ ] 歷史優良案件去識別 Skill
 
+## Gemini BYOK 使用方式
+
+1. 使用者在頁面「機敏資料控管」區貼上自己的 Gemini API Key。
+2. 系統以 `x-goog-api-key` header 驗證 Key，Key 不放在網址、請求本文或 log。
+3. 系統從 `models.list` 回傳結果選擇最高版本的穩定文字 Flash；若未來命名規則改變，才使用 `gemini-flash-latest`。
+4. Key 只存在目前 React 頁面的記憶體；重新整理、關閉頁面或按「清除」後即消失，不寫入 IndexedDB、JSON、DOCX、XLSX 或 ZIP。
+5. 每次外送前仍會經過 `privacy.ts` 白名單與敏感內容檢查；AI 結果只供人工審查，不會自動改寫案件。
+
+Google 官方仍建議正式產品使用後端代理保護 API Key。GitHub Pages 是純靜態網站，本專案採用的是「使用者自備 Key、明確知情、當頁記憶體保存」模式；請建立專用 Key、限制用途並設定用量／帳務警示。參考：[Gemini API Key 安全說明](https://ai.google.dev/gemini-api/docs/api-key)。
+
 ## 安全設計底線
 
-- Frontend 不得直接呼叫 OpenAI / Gemini / Claude 等 API。
-- 所有 AI 呼叫只能透過 `privacy.ts` 定義的 Gateway。
+- 所有 Gemini 呼叫只能透過 `privacy.ts` 定義的 Gateway；UI 不得直接傳送完整 `ProcurementCase`。
+- GitHub Pages 不得內建或共用開發者 API Key；BYOK Key 不得持久化、匯出、寫入 URL 或記錄。
 - `ProcurementCase` 不得整包送往外部 LLM。
 - `reservePrice`、`internalNotes` 永遠不得進入 AI context。
 - SENSITIVE / RESTRICTED 案件預設禁止外部 AI。
