@@ -17,7 +17,12 @@ import {
   type GuidanceOption,
 } from './procurement-guidance';
 import { formatRocDate, getTemplateArchive, getTemplateObservation, getTemplateSyncStatus, pccTemplateIndex } from './pcc';
-import { templateRegistry } from './templates';
+import {
+  PCC_CANDIDATE_PULL_REQUESTS_URL,
+  PCC_TEMPLATE_PROMOTION_ACTIONS_URL,
+  PCC_TEMPLATE_WATCHER_ACTIONS_URL,
+  templateRegistry,
+} from './templates';
 import { exportTenderInstructionsDraft } from './template-writer';
 import { exportServiceContractDraft } from './service-contract-writer';
 import { exportServiceRequirementsDraft } from './requirements-writer';
@@ -907,7 +912,7 @@ export default function App() {
 
           <div className="card">
             <h2>7. 工程會範本 Registry</h2>
-            <p className="muted">PCC Watcher 會監測公開索引，並另外封存核心範本的 Word / ODT / PDF 與 SHA-256。偵測到新版時只建立 candidate，必須人工確認後才可更新 active 範本。</p>
+            <p className="muted">PCC Watcher 會監測公開索引，並另外封存核心範本的 Word / ODT / PDF 與 SHA-256。偵測到新版時會建立 GitHub candidate PR；維護者完成差異審查後，再從 GitHub 執行升版流程建立 active PR。本站只顯示狀態，不會直接修改正式範本。</p>
             <div className="template-list">
               {applicableTemplates.map((item) => {
                 const observed = getTemplateObservation(item);
@@ -919,13 +924,29 @@ export default function App() {
                       <strong>{item.name}</strong>
                       <small>目前採用：{item.officialDate}{observed ? ` · 官方索引：${formatRocDate(observed.officialDate)}` : ''}</small>
                       <small>{archive ? `檔案封存：${formatRocDate(archive.latestObservedVersion)} · ${archive.versions[0]?.files.length ?? 0} 種格式` : '檔案封存：尚未建立'}</small>
+                      {observed?.detailUrl && <small><a href={observed.detailUrl} target="_blank" rel="noreferrer">查看工程會官方版本頁</a></small>}
                     </span>
-                    <span className={`tag ${syncStatus}`}>{syncLabels[syncStatus]}</span>
+                    <span className="template-status-actions">
+                      <span className={`tag ${syncStatus}`}>{syncLabels[syncStatus]}</span>
+                      {syncStatus === 'candidate' && (
+                        <a className="registry-review-link" href={PCC_CANDIDATE_PULL_REQUESTS_URL} target="_blank" rel="noreferrer">
+                          查看 GitHub 審查紀錄
+                        </a>
+                      )}
+                    </span>
                   </div>
                 );
               })}
             </div>
-            <p className="registry-source">監測來源：<a href={pccTemplateIndex.sourceUrl} target="_blank" rel="noreferrer">工程會「招標相關文件及表格」</a></p>
+            <p className="registry-source registry-links">
+              <span>監測來源：<a href={pccTemplateIndex.sourceUrl} target="_blank" rel="noreferrer">工程會「招標相關文件及表格」</a></span>
+              <span>·</span>
+              <a href={PCC_CANDIDATE_PULL_REQUESTS_URL} target="_blank" rel="noreferrer">候選版本 PR／紀錄</a>
+              <span>·</span>
+              <a href={PCC_TEMPLATE_WATCHER_ACTIONS_URL} target="_blank" rel="noreferrer">Watcher 執行紀錄</a>
+              <span>·</span>
+              <a href={PCC_TEMPLATE_PROMOTION_ACTIONS_URL} target="_blank" rel="noreferrer">升版 active</a>
+            </p>
           </div>
 
           <div className="actions card">

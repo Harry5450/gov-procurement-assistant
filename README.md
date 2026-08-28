@@ -170,6 +170,15 @@ active Template Registry
 
 Watcher 每週一至週五自動執行，也可從 GitHub Actions 手動執行。它只讀取工程會公開資料，不讀取 IndexedDB、案件內容或任何機敏資料。
 
+### 人工確認與升版入口
+
+1. 到 GitHub 的 [候選版本 PR／紀錄](https://github.com/Harry5450/gov-procurement-assistant/pulls?q=is%3Apr+head%3Aautomation%2Fpcc-template-update+sort%3Aupdated-desc) 開啟最新一筆，檢查 `Files changed`、normalized text、官方檔案版本與 SHA-256，確認自動測試通過後合併。
+2. 到 [Promote PCC Candidate](https://github.com/Harry5450/gov-procurement-assistant/actions/workflows/pcc-template-promote.yml) 選擇範本及 7 碼民國日期版本，手動執行升版。
+3. 升版工作流程會驗證候選版本已封存、版本確為最新觀測值，並在 promotion PR 同步 active Registry、Writer 範本路徑、Anchor audit 與 smoke test 版本指標；不會直接改寫 `main`。新版版型若不相容，測試會在建立 PR 前阻擋，必須先人工調整 Writer。
+4. 人工審查並合併 promotion PR 後，CI 重新建置 GitHub Pages，網站才會顯示「已同步」。
+
+GitHub Pages 公開頁面不具備 Repository 寫入權限；Registry 區只顯示狀態及上述 GitHub 入口，不提供直接核准按鈕。
+
 ## 下一階段 TODO
 
 ### Phase 1 — 完成一般勞務 Happy Path

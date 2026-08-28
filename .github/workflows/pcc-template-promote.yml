@@ -1,0 +1,152 @@
+name: Promote PCC Candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      template_id:
+        description: Candidate template to promote
+        required: true
+        type: choice
+        options:
+          - tender-instructions
+          - service-contract
+          - goods-contract
+          - construction-contract
+      version:
+        description: Seven-digit ROC version, for example 1150727
+        required: true
+        type: string
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: pcc-template-promote-${{ inputs.template_id }}
+  cancel-in-progress: false
+
+jobs:
+  promote:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Require a clean main checkout
+        shell: bash
+        run: |
+          test "$(git branch --show-current)" = "main"
+          git diff --quiet
+          git diff --cached --quiet
+
+      - name: Validate candidate and prepare active Registry change
+        id: prepare
+        env:
+          TEMPLATE_ID: ${{ inputs.template_id }}
+          TEMPLATE_VERSION: ${{ inputs.version }}
+        shell: bash
+        run: |
+          node scripts/pcc-promote.mjs \
+            --template "$TEMPLATE_ID" \
+            --version "$TEMPLATE_VERSION" \
+            --write
+          if git diff --quiet -- src/templates.ts; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Restrict promotion to approved version-pointer files
+        if: steps.prepare.outputs.changed == 'true'
+        env:
+          TEMPLATE_ID: ${{ inputs.template_id }}
+        shell: bash
+        run: |
+          while IFS= read -r FILE; do
+            case "$TEMPLATE_ID:$FILE" in
+              tender-instructions:src/templates.ts|tender-instructions:src/template-writer.ts|tender-instructions:scripts/template-anchor-audit.mjs|tender-instructions:scripts/template-writer-smoke.mjs) ;;
+              service-contract:src/templates.ts|service-contract:src/service-contract-writer.ts|service-contract:scripts/template-anchor-audit.mjs|service-contract:scripts/template-writer-smoke.mjs) ;;
+              goods-contract:src/templates.ts|construction-contract:src/templates.ts) ;;
+              *) echo "Unexpected promotion diff: $FILE"; exit 1 ;;
+            esac
+          done <<< "$(git diff --name-only)"
+          read -r ADDED REMOVED FILE <<< "$(git diff --numstat -- src/templates.ts)"
+          test "$ADDED" = "1"
+          test "$REMOVED" = "1"
+          test "$FILE" = "src/templates.ts"
+
+      - name: Validate promoted application
+        if: steps.prepare.outputs.changed == 'true'
+        run: |
+          npm run template:anchors
+          npm run template:smoke
+          npm run pcc:audit
+          npm test
+          npm run build:pages
+
+      - name: Publish promotion branch
+        if: steps.prepare.outputs.changed == 'true'
+        id: publish
+        env:
+          TEMPLATE_ID: ${{ inputs.template_id }}
+          TEMPLATE_VERSION: ${{ inputs.version }}
+        shell: bash
+        run: |
+          BRANCH="automation/pcc-template-promote-${TEMPLATE_ID}-${TEMPLATE_VERSION}-${GITHUB_RUN_ID}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
+          git add src/templates.ts
+          case "$TEMPLATE_ID" in
+            tender-instructions)
+              git add src/template-writer.ts scripts/template-anchor-audit.mjs scripts/template-writer-smoke.mjs
+              ;;
+            service-contract)
+              git add src/service-contract-writer.ts scripts/template-anchor-audit.mjs scripts/template-writer-smoke.mjs
+              ;;
+          esac
+          git commit -m "chore: promote PCC ${TEMPLATE_ID} ${TEMPLATE_VERSION}"
+          git push origin "$BRANCH"
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+
+      - name: Open active promotion PR
+        if: steps.prepare.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ steps.publish.outputs.branch }}
+          TEMPLATE_ID: ${{ inputs.template_id }}
+          TEMPLATE_VERSION: ${{ inputs.version }}
+        shell: bash
+        run: |
+          BODY=$(cat <<EOF
+          將已封存並完成 Writer／Anchor 驗證的工程會範本升為 active。
+
+          - 範本：\`${TEMPLATE_ID}\`
+          - 候選版本：\`${TEMPLATE_VERSION}\`
+          - 本 PR 更新 active Registry；有 Writer 的範本會一併更新 Writer、Anchor audit 與 smoke test 的版本指標。
+          - 本 PR 不改寫任何歷史官方檔案或 Manifest。
+          - 合併前請再次確認 candidate PR 的文字差異、SHA-256 與官方來源。
+          - Anchor 或 checkbox 不相容時，升版流程會在建立 PR 前失敗，必須先由維護者調整 Writer。
+          - 合併後一般 CI 會重新建置並部署 GitHub Pages。
+
+          此流程不會自動合併 PR。
+          EOF
+          )
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "chore: promote PCC ${TEMPLATE_ID} ${TEMPLATE_VERSION} to active" \
+            --body "$BODY"
+
+      - name: Report no-op
+        if: steps.prepare.outputs.changed != 'true'
+        run: echo "Requested version is already active; no PR was created."

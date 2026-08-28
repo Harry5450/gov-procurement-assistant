@@ -18,6 +18,10 @@ permissions:
   contents: write
   pull-requests: write
 
+concurrency:
+  group: pcc-template-watcher
+  cancel-in-progress: false
+
 jobs:
   check:
     runs-on: ubuntu-latest
@@ -65,8 +69,11 @@ jobs:
           node --check scripts/pcc-watcher.mjs
           node --check scripts/pcc-assets.mjs
           node --check scripts/pcc-text.mjs
+          node --check scripts/pcc-promote.mjs
+          node --check scripts/pcc-registry-audit.mjs
           node --check scripts/template-anchor-audit.mjs
           npm run pcc:text -- --dry-run
+          npm run pcc:audit
           npm run template:anchors
           npm run template:smoke
           npm run build
@@ -117,7 +124,7 @@ jobs:
           4. Writer 使用的 Anchor 必須在對應官方 XML 唯一解析；缺失或歧義時 candidate validation 直接失敗。
           5. 此 PR 仍是 candidate，不會自動更新 active Template Registry。
           6. Watcher 只讀工程會公開網站，不接觸任何採購案件、IndexedDB 或機敏內容。
-          7. 純 generated-data candidate PR 不重複觸發一般 CI；程式碼／workflow PR 仍會跑完整 CI。
+          7. candidate PR 也會觸發一般 CI；請勿直接修改 automation branch，修正應回到 watcher 或另開 PR。
 
           請人工確認新版本與文字差異，再決定是否合併及升版 active Registry。
           EOF
