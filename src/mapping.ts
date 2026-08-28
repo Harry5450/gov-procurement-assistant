@@ -78,6 +78,33 @@ function list(values?: string[]) {
   return values?.map((value) => value.trim()).filter(Boolean).join('；') ?? '';
 }
 
+function workflowFieldText(procurementCase: ProcurementCase, fieldId: string): string {
+  const value = procurementCase.fields?.[fieldId]?.value;
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+/** Convert the legacy machine values used by the first MVP into wording that
+ * can safely appear in previews and generated documents. */
+export function formatBondSetting(
+  procurementCase: ProcurementCase,
+  kind: 'bidBond' | 'performanceBond',
+): string {
+  const raw = procurementCase[kind]?.trim() ?? '';
+  if (!raw) return '';
+  const normalized = raw.toLowerCase();
+  const isNone = normalized === 'none'
+    || normalized === 'bid-bond-none'
+    || normalized === 'performance-bond-none';
+  if (isNone) return '不收取';
+  const isRequired = normalized === 'required'
+    || normalized === 'bid-bond-required'
+    || normalized === 'performance-bond-required';
+  if (!isRequired) return raw;
+  const detailId = kind === 'bidBond' ? 'decisions.bidBondDetails' : 'decisions.performanceBondDetails';
+  const details = workflowFieldText(procurementCase, detailId);
+  return details ? `收取；${details}` : '收取（詳細條件待填）';
+}
+
 export function buildCanonicalDocumentContext(procurementCase: ProcurementCase): Record<CanonicalFieldKey, CanonicalFieldValue> {
   const values: CanonicalFieldValue[] = [
     { key: 'agency', label: '機關名稱', value: procurementCase.agency.trim(), ready: Boolean(procurementCase.agency.trim()), source: 'agency' },
@@ -93,8 +120,8 @@ export function buildCanonicalDocumentContext(procurementCase: ProcurementCase):
     { key: 'procurementMethod', label: '招標方式', value: procurementCase.procurementMethod?.trim() ?? '', ready: Boolean(procurementCase.procurementMethod?.trim()), source: 'procurementMethod' },
     { key: 'awardPrinciple', label: '決標原則', value: procurementCase.awardPrinciple?.trim() ?? '', ready: Boolean(procurementCase.awardPrinciple?.trim()), source: 'awardPrinciple' },
     { key: 'awardMethod', label: '決標方式', value: procurementCase.awardMethod?.trim() ?? '', ready: Boolean(procurementCase.awardMethod?.trim()), source: 'awardMethod' },
-    { key: 'bidBond', label: '押標金', value: procurementCase.bidBond?.trim() ?? '', ready: Boolean(procurementCase.bidBond?.trim()), source: 'bidBond' },
-    { key: 'performanceBond', label: '履約保證金', value: procurementCase.performanceBond?.trim() ?? '', ready: Boolean(procurementCase.performanceBond?.trim()), source: 'performanceBond' },
+    { key: 'bidBond', label: '押標金', value: formatBondSetting(procurementCase, 'bidBond'), ready: Boolean(procurementCase.bidBond?.trim()), source: 'bidBond' },
+    { key: 'performanceBond', label: '履約保證金', value: formatBondSetting(procurementCase, 'performanceBond'), ready: Boolean(procurementCase.performanceBond?.trim()), source: 'performanceBond' },
     { key: 'contractPriceMethod', label: '契約價金計算方式', value: procurementCase.contractPriceMethod?.trim() ?? '', ready: Boolean(procurementCase.contractPriceMethod?.trim()), source: 'contractPriceMethod' },
   ];
 

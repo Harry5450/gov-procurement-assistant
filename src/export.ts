@@ -1,6 +1,6 @@
 import { Document, HeadingLevel, Packer, Paragraph, TextRun } from 'docx';
 import { saveAs } from 'file-saver';
-import { buildAllTemplateMappingPreviews } from './mapping';
+import { buildAllTemplateMappingPreviews, formatBondSetting } from './mapping';
 import type { ProcurementCase, RuleResult } from './types';
 
 export async function exportCaseDocx(procurementCase: ProcurementCase, rules: RuleResult) {
@@ -14,8 +14,8 @@ export async function exportCaseDocx(procurementCase: ProcurementCase, rules: Ru
     ['決標原則', procurementCase.awardPrinciple || '未填'],
     ['決標方式', procurementCase.awardMethod || '未填'],
     ['契約價金計算方式', procurementCase.contractPriceMethod || '未填'],
-    ['押標金', procurementCase.bidBond || '未填'],
-    ['履約保證金', procurementCase.performanceBond || '未填'],
+    ['押標金', formatBondSetting(procurementCase, 'bidBond') || '未填'],
+    ['履約保證金', formatBondSetting(procurementCase, 'performanceBond') || '未填'],
     ['付款條件', procurementCase.paymentTerms || '未填'],
     ['驗收方式', procurementCase.acceptanceMethod || '未填'],
     ['廠商資格', procurementCase.vendorQualification || '未填'],

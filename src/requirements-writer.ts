@@ -1,6 +1,6 @@
 import { Document, HeadingLevel, Packer, Paragraph, TextRun } from 'docx';
 import { saveAs } from 'file-saver';
-import { validateCanonicalConsistency } from './mapping';
+import { formatBondSetting, validateCanonicalConsistency } from './mapping';
 import type { ProcurementCase } from './types';
 
 export interface RequirementsDraftReport {
@@ -88,7 +88,7 @@ export function buildServiceRequirementsModel(procurementCase: ProcurementCase):
   const awardPrinciple = safeText(procurementCase.awardPrinciple) || '【待機關確認】';
   const awardMethod = safeText(procurementCase.awardMethod) || '【待機關確認】';
   const contractPriceMethod = safeText(procurementCase.contractPriceMethod) || '【待機關確認】';
-  const performanceBond = safeText(procurementCase.performanceBond) || '【待機關確認】';
+  const performanceBond = formatBondSetting(procurementCase, 'performanceBond') || '【待機關確認】';
 
   const sections: RequirementsSection[] = [
     {

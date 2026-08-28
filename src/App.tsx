@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { buildCrossDocumentConsistencyReport } from './consistency';
+import {
+  evaluateCaseReadiness,
+  getWorkflowFieldDefinitions,
+  normalizeProcurementCase,
+  updateCaseField,
+} from './case-workflow';
 import { deleteCase, listCases, upsertCase } from './db';
 import { exportCaseDocx, exportCaseJson } from './export';
 import { buildAllTemplateMappingPreviews } from './mapping';
@@ -26,7 +32,24 @@ import {
 import { exportTenderInstructionsDraft } from './template-writer';
 import { exportServiceContractDraft } from './service-contract-writer';
 import { exportServiceRequirementsDraft } from './requirements-writer';
-import type { PricingItem, ProcurementCase, ProcurementCategory, SecurityLevel } from './types';
+import RequirementsIntake, { type RequirementsIntakeMode } from './intake-components';
+import type { IntakeFileValidationResult } from './intake-file';
+import { LocalDocumentParseError, parseLocalDocumentFile } from './local-document-parser';
+import {
+  FieldReadinessPanel,
+  ImportedRequirementPreview,
+  RequirementSummary,
+  WorkflowStepper,
+  type LocalImportPreview,
+} from './workflow-components';
+import type {
+  FieldDefinition,
+  PricingItem,
+  ProcurementCase,
+  ProcurementCategory,
+  SecurityLevel,
+  SourceDocument,
+} from './types';
 
 function newCase(): ProcurementCase {
   const now = new Date().toISOString();
@@ -52,6 +75,9 @@ function newCase(): ProcurementCase {
     securityLevel: 'INTERNAL',
     createdAt: now,
     updatedAt: now,
+    schemaVersion: 2,
+    workflowStage: 'intake',
+    sourceDocuments: [],
   };
 }
 
@@ -74,6 +100,26 @@ const syncLabels = {
   candidate: '有新版待確認',
   untracked: '未追蹤',
 } as const;
+
+const requirementFieldDefinitions: FieldDefinition[] = [
+  ...getWorkflowFieldDefinitions('requirements'),
+  ...getWorkflowFieldDefinitions('pricing'),
+];
+
+const decisionFieldDefinitions: FieldDefinition[] = [
+  ...getWorkflowFieldDefinitions('decisions'),
+  ...getWorkflowFieldDefinitions('contract'),
+];
+
+const legacyFieldDefinitionByKey = new Map(
+  [...requirementFieldDefinitions, ...decisionFieldDefinitions]
+    .filter((definition) => definition.legacyKey)
+    .map((definition) => [definition.legacyKey!, definition] as const),
+);
+
+const workflowDefinitionById = new Map(
+  [...requirementFieldDefinitions, ...decisionFieldDefinitions].map((definition) => [definition.id, definition] as const),
+);
 
 function pricingSubtotal(item: PricingItem) {
   if (item.quantity === undefined || item.estimatedUnitPrice === undefined) return undefined;
@@ -140,12 +186,25 @@ export default function App() {
   const [geminiMessage, setGeminiMessage] = useState('');
   const [geminiHasError, setGeminiHasError] = useState(false);
   const [templateWriteStatus, setTemplateWriteStatus] = useState('');
+  const [intakeFileResult, setIntakeFileResult] = useState<IntakeFileValidationResult | null>(null);
+  const [localImportPreview, setLocalImportPreview] = useState<LocalImportPreview | null>(null);
+  const [workflowMessage, setWorkflowMessage] = useState('');
   const geminiAbortRef = useRef<AbortController | null>(null);
 
   const rules = useMemo(() => evaluateCase(current), [current]);
   const score = useMemo(() => completenessScore(current), [current]);
   const mappingPreviews = useMemo(() => buildAllTemplateMappingPreviews(current), [current]);
   const preflight = useMemo(() => buildCrossDocumentConsistencyReport(current), [current]);
+  const workflowCase = useMemo(() => normalizeProcurementCase(current), [current]);
+  const requirementsReadiness = useMemo(
+    () => evaluateCaseReadiness(workflowCase, requirementFieldDefinitions),
+    [workflowCase],
+  );
+  const decisionReadiness = useMemo(
+    () => evaluateCaseReadiness(workflowCase, decisionFieldDefinitions),
+    [workflowCase],
+  );
+  const formalReadiness = useMemo(() => evaluateCaseReadiness(workflowCase), [workflowCase]);
   const procurementGuidance = useMemo(() => buildProcurementGuidance({
     budget: current.budget,
     category: current.category,
@@ -169,9 +228,38 @@ export default function App() {
     () => (current.pricingItems ?? []).reduce((sum, item) => sum + (pricingSubtotal(item) ?? 0), 0),
     [current.pricingItems],
   );
+  const workflowStage = current.workflowStage
+    ?? (current.schemaVersion === 2 ? 'intake' : 'procurement-decisions');
+  const intakeUiMode: RequirementsIntakeMode | null = current.intakeMode === 'guided' || current.intakeMode === 'upload'
+    ? current.intakeMode
+    : null;
+  const isIntake = workflowStage === 'intake';
+  const isRequirementsReview = workflowStage === 'requirements-review';
+  const isDocumentWorkflow = !isIntake && !isRequirementsReview;
+  const canFormalPackage = preflight.canPackage && formalReadiness.ready;
+  const workflowFieldValue = (fieldId: string) => workflowCase.fields[fieldId]?.value;
+  const workflowFieldIsApplicable = (fieldId: string) => formalReadiness.fields.find((field) => field.fieldId === fieldId)?.applicable ?? false;
 
   async function refresh() {
     setCases(await listCases());
+  }
+
+  function beginNewCase() {
+    setCurrent(newCase());
+    setIntakeFileResult(null);
+    setLocalImportPreview(null);
+    setWorkflowMessage('');
+    setTemplateWriteStatus('');
+    setSaved(false);
+  }
+
+  function openCase(procurementCase: ProcurementCase) {
+    setCurrent(normalizeProcurementCase(procurementCase));
+    setIntakeFileResult(null);
+    setLocalImportPreview(null);
+    setWorkflowMessage('');
+    setTemplateWriteStatus('');
+    setSaved(true);
   }
 
   useEffect(() => {
@@ -183,40 +271,56 @@ export default function App() {
   function patch<K extends keyof ProcurementCase>(key: K, value: ProcurementCase[K]) {
     setSaved(false);
     setTemplateWriteStatus('');
-    setCurrent((prev) => ({ ...prev, [key]: value, updatedAt: new Date().toISOString() }));
+    setWorkflowMessage('');
+    setCurrent((prev) => {
+      const updated = { ...prev, [key]: value, updatedAt: new Date().toISOString() };
+      const definition = legacyFieldDefinitionByKey.get(key);
+      return definition
+        ? updateCaseField(updated, definition.id, { value, confirmed: false, sourceKind: 'user' })
+        : updated;
+    });
   }
 
   function patchPricingItem(id: string, values: Partial<PricingItem>) {
     setSaved(false);
     setTemplateWriteStatus('');
-    setCurrent((prev) => ({
-      ...prev,
-      pricingItems: (prev.pricingItems ?? []).map((item) => (item.id === id ? { ...item, ...values } : item)),
-      updatedAt: new Date().toISOString(),
-    }));
+    setCurrent((prev) => {
+      const pricingItems = (prev.pricingItems ?? []).map((item) => (item.id === id ? { ...item, ...values } : item));
+      return updateCaseField(
+        { ...prev, pricingItems, updatedAt: new Date().toISOString() },
+        'pricing.items',
+        { value: pricingItems, confirmed: false, sourceKind: 'user' },
+      );
+    });
   }
 
   function addPricingItem(description = '') {
     setSaved(false);
     setTemplateWriteStatus('');
-    setCurrent((prev) => ({
-      ...prev,
-      pricingItems: [
+    setCurrent((prev) => {
+      const pricingItems = [
         ...(prev.pricingItems ?? []),
         { id: crypto.randomUUID(), description },
-      ],
-      updatedAt: new Date().toISOString(),
-    }));
+      ];
+      return updateCaseField(
+        { ...prev, pricingItems, updatedAt: new Date().toISOString() },
+        'pricing.items',
+        { value: pricingItems, confirmed: false, sourceKind: 'user' },
+      );
+    });
   }
 
   function removePricingItem(id: string) {
     setSaved(false);
     setTemplateWriteStatus('');
-    setCurrent((prev) => ({
-      ...prev,
-      pricingItems: (prev.pricingItems ?? []).filter((item) => item.id !== id),
-      updatedAt: new Date().toISOString(),
-    }));
+    setCurrent((prev) => {
+      const pricingItems = (prev.pricingItems ?? []).filter((item) => item.id !== id);
+      return updateCaseField(
+        { ...prev, pricingItems, updatedAt: new Date().toISOString() },
+        'pricing.items',
+        { value: pricingItems, confirmed: false, sourceKind: 'user' },
+      );
+    });
   }
 
   function syncDeliverablesToPricing() {
@@ -233,11 +337,14 @@ export default function App() {
 
     setSaved(false);
     setTemplateWriteStatus(`已由主要交付成果新增 ${additions.length} 個標價項目；數量、單位與內部預估單價仍須人工填列。`);
-    setCurrent((prev) => ({
-      ...prev,
-      pricingItems: [...(prev.pricingItems ?? []), ...additions],
-      updatedAt: new Date().toISOString(),
-    }));
+    setCurrent((prev) => {
+      const nextPricingItems = [...(prev.pricingItems ?? []), ...additions];
+      return updateCaseField(
+        { ...prev, pricingItems: nextPricingItems, updatedAt: new Date().toISOString() },
+        'pricing.items',
+        { value: nextPricingItems, confirmed: false, sourceKind: 'user' },
+      );
+    });
   }
 
   async function save() {
@@ -248,8 +355,163 @@ export default function App() {
 
   async function remove(id: string) {
     await deleteCase(id);
-    if (current.id === id) setCurrent(newCase());
+    if (current.id === id) beginNewCase();
     await refresh();
+  }
+
+  function chooseIntakeMode(mode: RequirementsIntakeMode) {
+    setIntakeFileResult(null);
+    setLocalImportPreview(null);
+    setWorkflowMessage('');
+    setSaved(false);
+    setCurrent((prev) => normalizeProcurementCase({
+      ...prev,
+      intakeMode: mode,
+      workflowStage: 'intake',
+      updatedAt: new Date().toISOString(),
+    }));
+  }
+
+  function startGuidedRequirements() {
+    setWorkflowMessage('請依序完成必填需求；所有欄位都會保留用途與填寫說明。');
+    setSaved(false);
+    setCurrent((prev) => normalizeProcurementCase({
+      ...prev,
+      intakeMode: 'guided',
+      workflowStage: 'requirements-review',
+      updatedAt: new Date().toISOString(),
+    }));
+  }
+
+  async function parseSelectedRequirementFile(file: File, result: IntakeFileValidationResult) {
+    if (!result.ok) return;
+    setLocalImportPreview({ fileName: file.name, status: 'parsing', message: '正在瀏覽器記憶體中擷取文字…' });
+    try {
+      const parsed = await parseLocalDocumentFile(file);
+      setLocalImportPreview({
+        fileName: parsed.fileName,
+        status: 'parsed',
+        text: parsed.text,
+        blockCount: parsed.blocks.length,
+        message: '文字已在本機擷取；系統不會自動把它判定為正式欄位，請逐項確認。',
+      });
+    } catch (error) {
+      const isPdf = error instanceof LocalDocumentParseError && error.code === 'UNSUPPORTED_PDF';
+      setLocalImportPreview({
+        fileName: file.name,
+        status: isPdf ? 'manual-review' : 'failed',
+        message: isPdf
+          ? 'PDF 已可作為來源附件，但本版尚未自動擷取 PDF 文字；請依原文件人工補登並確認欄位。'
+          : error instanceof Error
+            ? `本機解析失敗：${error.message}`
+            : '本機解析失敗，請改用 DOCX 或 ODT。',
+      });
+    }
+  }
+
+  function confirmUploadedRequirement(result: IntakeFileValidationResult) {
+    if (!result.ok || localImportPreview?.status === 'parsing') return;
+    const format = result.metadata.kind === 'docx' || result.metadata.kind === 'odt' || result.metadata.kind === 'pdf'
+      ? result.metadata.kind
+      : 'other';
+    const source: SourceDocument = {
+      id: crypto.randomUUID(),
+      name: result.metadata.name,
+      fileName: result.metadata.name,
+      format,
+      mimeType: result.metadata.mimeType || undefined,
+      sizeBytes: result.metadata.size,
+      importedAt: new Date().toISOString(),
+      status: localImportPreview?.status === 'parsed'
+        ? 'parsed'
+        : localImportPreview?.status === 'failed'
+          ? 'failed'
+          : 'needs-review',
+      localOnly: true,
+      parserVersion: localImportPreview?.status === 'parsed' ? 'local-xml-v1' : undefined,
+      error: localImportPreview?.status === 'failed' ? localImportPreview.message : undefined,
+    };
+    setWorkflowMessage('需求書已登記為本機來源。請對照原文逐項完成需求確認；系統尚未替您作成任何法定判斷。');
+    setSaved(false);
+    setCurrent((prev) => normalizeProcurementCase({
+      ...prev,
+      intakeMode: 'upload',
+      workflowStage: 'requirements-review',
+      sourceDocuments: [...(prev.sourceDocuments ?? []), source],
+      updatedAt: new Date().toISOString(),
+    }));
+  }
+
+  function confirmRequirementsAndContinue() {
+    let candidate = normalizeProcurementCase(current);
+    for (const definition of requirementFieldDefinitions) {
+      const field = candidate.fields[definition.id];
+      if (!field || field.state === 'missing' || field.state === 'unknown' || field.state === 'conflict') continue;
+      candidate = updateCaseField(candidate, definition.id, {
+        confirmed: true,
+        source: field.source ?? { kind: 'user' },
+      });
+    }
+    const report = evaluateCaseReadiness(candidate, requirementFieldDefinitions);
+    if (!report.ready) {
+      setCurrent(candidate);
+      setWorkflowMessage(`需求尚未完成：請處理 ${report.blockingIssues.map((item) => item.label).join('、')}。`);
+      return;
+    }
+    setWorkflowMessage('需求基礎已確認。接下來請完成招標、決標、押標金、保險及契約條件。');
+    setSaved(false);
+    setCurrent({
+      ...candidate,
+      workflowStage: 'procurement-decisions',
+      updatedAt: new Date().toISOString(),
+    });
+  }
+
+  function returnToRequirements() {
+    setWorkflowMessage('需求已重新開啟；修改後請再次確認。');
+    setSaved(false);
+    setCurrent((prev) => ({
+      ...prev,
+      workflowStage: 'requirements-review',
+      updatedAt: new Date().toISOString(),
+    }));
+  }
+
+  function patchWorkflowField(fieldId: string, value: unknown) {
+    setSaved(false);
+    setTemplateWriteStatus('');
+    setWorkflowMessage('');
+    setCurrent((prev) => {
+      const next = updateCaseField(prev, fieldId, { value, confirmed: false, sourceKind: 'user' });
+      return next.workflowStage === 'tender-draft' || next.workflowStage === 'contract-draft' || next.workflowStage === 'review'
+        ? { ...next, workflowStage: 'procurement-decisions' }
+        : next;
+    });
+  }
+
+  function confirmProcurementAndContractSettings() {
+    let candidate = normalizeProcurementCase(current);
+    for (const definition of decisionFieldDefinitions) {
+      const field = candidate.fields[definition.id];
+      if (!field || field.state === 'missing' || field.state === 'unknown' || field.state === 'conflict') continue;
+      candidate = updateCaseField(candidate, definition.id, {
+        confirmed: true,
+        source: field.source ?? { kind: 'user' },
+      });
+    }
+    const report = evaluateCaseReadiness(candidate);
+    if (!report.ready) {
+      setCurrent(candidate);
+      setWorkflowMessage(`招標與契約設定尚未完成：請處理 ${report.blockingIssues.map((item) => item.label).join('、')}。`);
+      return;
+    }
+    setSaved(false);
+    setWorkflowMessage('採購與契約條件已確認，可以進行跨文件檢查與草稿產製。');
+    setCurrent({
+      ...candidate,
+      workflowStage: 'tender-draft',
+      updatedAt: new Date().toISOString(),
+    });
   }
 
   function previewAI() {
@@ -367,7 +629,7 @@ export default function App() {
   async function generateEditableProcurementDraft() {
     if (!geminiSelection) {
       setGeminiDraftHasError(true);
-      setGeminiDraftMessage('請先在「4. 機敏資料控管」驗證 Gemini API Key。');
+      setGeminiDraftMessage('請先在本區下方驗證 Gemini API Key。');
       return;
     }
     if (current.category === 'unknown' || !current.description.trim()) {
@@ -442,22 +704,31 @@ export default function App() {
 
     setSaved(false);
     setTemplateWriteStatus('');
-    setCurrent((prev) => ({
-      ...prev,
-      paymentTerms: prev.paymentTerms.trim() ? prev.paymentTerms : draft.paymentTerms,
-      acceptanceMethod: prev.acceptanceMethod.trim() ? prev.acceptanceMethod : draft.acceptanceMethod,
-      vendorQualification: prev.vendorQualification.trim() ? prev.vendorQualification : draft.vendorQualification,
-      deliverables: prev.deliverables.length ? prev.deliverables : [...draft.deliverables],
-      pricingItems: (prev.pricingItems ?? []).length
-        ? prev.pricingItems
-        : draft.pricingItems.map((item) => ({
+    setCurrent((prev) => {
+      let next = normalizeProcurementCase(prev);
+      if (!prev.paymentTerms.trim() && draft.paymentTerms) {
+        next = updateCaseField(next, 'requirements.paymentTerms', { value: draft.paymentTerms, confirmed: false, sourceKind: 'ai' });
+      }
+      if (!prev.acceptanceMethod.trim() && draft.acceptanceMethod) {
+        next = updateCaseField(next, 'requirements.acceptanceMethod', { value: draft.acceptanceMethod, confirmed: false, sourceKind: 'ai' });
+      }
+      if (!prev.vendorQualification.trim() && draft.vendorQualification) {
+        next = updateCaseField(next, 'requirements.vendorQualification', { value: draft.vendorQualification, confirmed: false, sourceKind: 'ai' });
+      }
+      if (!prev.deliverables.length && draft.deliverables.length) {
+        next = updateCaseField(next, 'requirements.deliverables', { value: [...draft.deliverables], confirmed: false, sourceKind: 'ai' });
+      }
+      if (!(prev.pricingItems ?? []).length && draft.pricingItems.length) {
+        const generatedPricingItems = draft.pricingItems.map((item) => ({
           id: crypto.randomUUID(),
           description: item.description,
           quantity: item.quantity,
           unit: item.unit,
-        })),
-      updatedAt: new Date().toISOString(),
-    }));
+        }));
+        next = updateCaseField(next, 'pricing.items', { value: generatedPricingItems, confirmed: false, sourceKind: 'ai' });
+      }
+      return next;
+    });
     setGeminiDraft(null);
     setGeminiDraftHasError(false);
     setGeminiDraftMessage(`已套用：${applied.join('、')}。既有內容未覆蓋；預估單價仍由承辦人依市場資料填寫。`);
@@ -516,8 +787,9 @@ export default function App() {
   }
 
   async function exportCompletePackage() {
-    if (!preflight.canPackage) {
-      setTemplateWriteStatus(`完整招標文件包尚未就緒：${preflight.blockers.length} 項阻擋。請先處理「系統警示」中的【禁止整包輸出】項目。`);
+    if (!canFormalPackage) {
+      const workflowBlocks = formalReadiness.blockingIssues.length;
+      setTemplateWriteStatus(`完整招標文件包尚未就緒：文件一致性 ${preflight.blockers.length} 項、欄位確認 ${workflowBlocks} 項阻擋。請先處理系統警示與待確認欄位。`);
       return;
     }
 
@@ -539,7 +811,7 @@ export default function App() {
     <div className="app-shell">
       <header className="topbar">
         <div>
-          <p className="eyebrow">GovProcure Assistant · MVP 0.1</p>
+          <p className="eyebrow">GovProcure Assistant · MVP 0.2</p>
           <h1>公務採購文件智慧助理</h1>
           <p className="subtitle">Local-first：案件內容預設只存在這台裝置的瀏覽器，不上傳伺服器。</p>
         </div>
@@ -552,7 +824,7 @@ export default function App() {
         <aside className="sidebar card">
           <div className="sidebar-heading">
             <h2>我的案件</h2>
-            <button className="secondary" onClick={() => setCurrent(newCase())}>＋ 新案件</button>
+            <button className="secondary" onClick={beginNewCase}>＋ 新案件</button>
           </div>
           {cases.length === 0 ? (
             <p className="muted">目前沒有本機案件。</p>
@@ -560,7 +832,7 @@ export default function App() {
             <div className="case-list">
               {cases.map((item) => (
                 <div className={`case-item ${current.id === item.id ? 'active' : ''}`} key={item.id}>
-                  <button className="case-open" onClick={() => setCurrent(item)}>
+                  <button className="case-open" onClick={() => openCase(item)}>
                     <strong>{item.title || '未命名案件'}</strong>
                     <span>{categoryNames[item.category]} · {new Date(item.updatedAt).toLocaleString('zh-TW')}</span>
                   </button>
@@ -581,20 +853,65 @@ export default function App() {
             <span className={`save-state ${saved ? 'ok' : ''}`}>{saved ? '已儲存於本機' : '尚有未儲存變更'}</span>
           </div>
 
-          <div className="card">
+          <WorkflowStepper stage={workflowStage} />
+
+          {workflowMessage && (
+            <div className={`workflow-message ${workflowMessage.includes('尚未') || workflowMessage.includes('請處理') ? 'warning' : ''}`} role="status">
+              {workflowMessage}
+            </div>
+          )}
+
+          {isIntake && (
+            <div className="card intake-card">
+              <RequirementsIntake
+                mode={intakeUiMode}
+                fileResult={intakeFileResult}
+                onModeChange={chooseIntakeMode}
+                onFileValidated={(result) => {
+                  setIntakeFileResult(result);
+                  if (!result.ok) setLocalImportPreview(null);
+                }}
+                onLocalFileSelected={(file, result) => void parseSelectedRequirementFile(file, result)}
+                onStartGuided={startGuidedRequirements}
+                onConfirmUpload={confirmUploadedRequirement}
+                onClearFile={() => { setIntakeFileResult(null); setLocalImportPreview(null); }}
+                disabled={localImportPreview?.status === 'parsing'}
+              />
+              {localImportPreview?.status === 'parsing' && <p className="muted" role="status">正在本機解析，完成前不會離開此頁。</p>}
+            </div>
+          )}
+
+          {isRequirementsReview && (
+            <ImportedRequirementPreview
+              source={workflowCase.sourceDocuments.at(-1)}
+              preview={localImportPreview}
+            />
+          )}
+
+          {isDocumentWorkflow && (
+            <RequirementSummary
+              title={current.title}
+              agency={current.agency}
+              description={current.description}
+              deliverables={current.deliverables}
+              onEdit={returnToRequirements}
+            />
+          )}
+
+          {isRequirementsReview && <div className="card">
             <h2>1. 基本資料</h2>
             <div className="form-grid">
               <label>機關名稱<input value={current.agency} onChange={(e) => patch('agency', e.target.value)} placeholder="例如：○○縣政府" /></label>
               <label>案名<input value={current.title} onChange={(e) => patch('title', e.target.value)} placeholder="例如：115年度資訊系統維護案" /></label>
               <label>採購類型<select value={current.category} onChange={(e) => patch('category', e.target.value as ProcurementCategory)}><option value="unknown">不知道／稍後判斷</option><option value="service">勞務</option><option value="goods">財物</option><option value="construction">工程</option></select></label>
               <label>預算金額<input type="number" min="0" value={current.budget || ''} onChange={(e) => patch('budget', Number(e.target.value))} placeholder="980000" /></label>
-              <label>履約開始<input type="date" value={current.contractStart || ''} onChange={(e) => patch('contractStart', e.target.value)} /></label>
-              <label>履約結束<input type="date" value={current.contractEnd || ''} onChange={(e) => patch('contractEnd', e.target.value)} /></label>
+              <label>履約開始<input type="date" value={current.contractStart || ''} onInput={(e) => patch('contractStart', e.currentTarget.value)} /></label>
+              <label>履約結束<input type="date" value={current.contractEnd || ''} onInput={(e) => patch('contractEnd', e.currentTarget.value)} /></label>
             </div>
             <label>採購需求<textarea rows={5} value={current.description} onChange={(e) => patch('description', e.target.value)} placeholder="用白話描述要買什麼、委託什麼、希望廠商完成什麼。" /></label>
-          </div>
+          </div>}
 
-          <div className="card">
+          {isDocumentWorkflow && <div className="card">
             <h2>2. 招標與決標設定</h2>
             <p className="muted">系統依金額級距與所選程序縮小後續選項，提供法源與建議；最終仍由承辦人依案件性質、機關層級及核准程序確認。</p>
 
@@ -661,15 +978,33 @@ export default function App() {
                 onChange={(value) => patch('contractPriceMethod', value)}
                 disabled={current.category === 'unknown'}
               />
-              <label>押標金<input value={current.bidBond ?? ''} onChange={(e) => patch('bidBond', e.target.value)} placeholder="例如：免收／一定金額 30,000 元" /></label>
-              <label>履約保證金<input value={current.performanceBond ?? ''} onChange={(e) => patch('performanceBond', e.target.value)} placeholder="例如：免收／契約金額 10%" /></label>
+              <label>
+                押標金
+                <select value={current.bidBond ?? ''} onChange={(e) => patch('bidBond', e.target.value)}>
+                  <option value="">請選擇並確認</option>
+                  {workflowDefinitionById.get('decisions.bidBond')?.options?.map((option) => (
+                    <option key={option.value} value={option.legacyValue ?? option.value}>{option.label}</option>
+                  ))}
+                </select>
+                <small className="field-help">選擇收取後，系統會要求金額、方式及有效期。</small>
+              </label>
+              <label>
+                履約保證金
+                <select value={current.performanceBond ?? ''} onChange={(e) => patch('performanceBond', e.target.value)}>
+                  <option value="">請選擇並確認</option>
+                  {workflowDefinitionById.get('decisions.performanceBond')?.options?.map((option) => (
+                    <option key={option.value} value={option.legacyValue ?? option.value}>{option.label}</option>
+                  ))}
+                </select>
+                <small className="field-help">選擇收取後，系統會要求金額、形式及返還條件。</small>
+              </label>
             </div>
-          </div>
+          </div>}
 
-          <div className="card">
+          {isRequirementsReview && <div className="card">
             <div className="section-heading">
               <div>
-                <h2>3. 履約、驗收與資格</h2>
+                <h2>2. 需求內容、履約與驗收</h2>
                 <p className="muted">Gemini 可依採購需求產生可編輯草稿；先預覽、再套用到空白欄位，不會覆蓋既有內容。</p>
               </div>
               <button className="ai-draft-button" disabled={geminiBusy} onClick={() => void generateEditableProcurementDraft()}>
@@ -677,9 +1012,37 @@ export default function App() {
               </button>
             </div>
             <p className="ai-draft-safety">
-              {geminiSelection ? `已連線 ${geminiSelection.selectedModel}` : '尚未驗證 Gemini Key；可先填需求，再到第4節驗證。'}
+              {geminiSelection ? `已連線 ${geminiSelection.selectedModel}` : '尚未驗證 Gemini Key；可在下方啟用，或完全不使用 AI。'}
               <span>AI 不會產生底價、預估單價、保額或法定招決標選項。</span>
             </p>
+            {!geminiSelection && (
+              <div className="requirements-ai-setup" aria-label="需求草稿 AI 設定">
+                <div>
+                  <strong>選用：以自己的 Gemini API Key 協助起草</strong>
+                  <p>Key 只保存在目前分頁記憶體；驗證前不會傳送案件內容。</p>
+                </div>
+                <label>
+                  Gemini API Key
+                  <input
+                    type="password"
+                    value={geminiApiKey}
+                    onChange={(event) => changeGeminiApiKey(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter' && !geminiBusy) void verifyGeminiApiKey();
+                    }}
+                    autoComplete="off"
+                    spellCheck={false}
+                    placeholder="輸入 Google AI Studio API Key"
+                  />
+                </label>
+                <button disabled={geminiBusy || !geminiApiKey.trim()} onClick={() => void verifyGeminiApiKey()}>
+                  {geminiBusy ? '驗證中…' : '驗證 Key'}
+                </button>
+                {geminiMessage && (
+                  <p className={`gemini-status ${geminiHasError ? 'error' : ''}`} role="status">{geminiMessage}</p>
+                )}
+              </div>
+            )}
             <div className="form-grid">
               <label>付款條件<input value={current.paymentTerms} onChange={(e) => patch('paymentTerms', e.target.value)} placeholder="例如：每季驗收合格後付款" /></label>
               <label>驗收方式<input value={current.acceptanceMethod} onChange={(e) => patch('acceptanceMethod', e.target.value)} placeholder="例如：成果報告＋功能測試" /></label>
@@ -790,9 +1153,153 @@ export default function App() {
                 <p className="muted">尚未建立標價項目。可先填主要交付成果，再按「從交付成果建立」。</p>
               )}
             </div>
-          </div>
+          </div>}
 
-          <div className="card security-card">
+          {isRequirementsReview && (
+            <div className="card requirement-confirmation-card">
+              <FieldReadinessPanel
+                title="需求欄位檢核"
+                description="必填欄位要有內容、通過格式檢查並由您確認；AI或上傳擷取內容不會自動算完成。"
+                report={requirementsReadiness}
+                definitions={requirementFieldDefinitions}
+              />
+              <div className="stage-actions">
+                <button className="secondary" onClick={beginNewCase}>
+                  回到需求入口
+                </button>
+                <button onClick={confirmRequirementsAndContinue}>確認需求並進入採購決策</button>
+              </div>
+            </div>
+          )}
+
+          {isDocumentWorkflow && (
+            <div className="card conditional-fields-card">
+              <div className="section-heading">
+                <div>
+                  <h2>3. 條件必填與契約風險</h2>
+                  <p className="muted">系統依前面的選項展開後續欄位；未適用者不會阻擋，適用者必須填寫並確認。</p>
+                </div>
+                <span className={`tag ${decisionReadiness.ready ? 'current' : 'candidate'}`}>
+                  {decisionReadiness.ready ? '本區已確認' : `${decisionReadiness.blockingIssues.length} 項待處理`}
+                </span>
+              </div>
+
+              <div className="conditional-field-list">
+                {workflowFieldIsApplicable('decisions.evaluationDetails') && (
+                  <label>
+                    評審／評選設定 <span className="required-label">條件必填</span>
+                    <textarea
+                      rows={4}
+                      value={String(workflowFieldValue('decisions.evaluationDetails') ?? '')}
+                      onChange={(event) => patchWorkflowField('decisions.evaluationDetails', event.target.value)}
+                      placeholder="評審項目與配分、及格門檻、價格是否納入、最優勝與同分處理方式"
+                    />
+                    <small className="field-help">{workflowDefinitionById.get('decisions.evaluationDetails')?.helpText}</small>
+                  </label>
+                )}
+
+                {workflowFieldIsApplicable('decisions.bidBondDetails') && (
+                  <label>
+                    押標金細節 <span className="required-label">條件必填</span>
+                    <textarea
+                      rows={3}
+                      value={String(workflowFieldValue('decisions.bidBondDetails') ?? '')}
+                      onChange={(event) => patchWorkflowField('decisions.bidBondDetails', event.target.value)}
+                      placeholder="金額或比例、繳納方式、有效期間及退還條件"
+                    />
+                  </label>
+                )}
+
+                {workflowFieldIsApplicable('decisions.performanceBondDetails') && (
+                  <label>
+                    履約保證金細節 <span className="required-label">條件必填</span>
+                    <textarea
+                      rows={3}
+                      value={String(workflowFieldValue('decisions.performanceBondDetails') ?? '')}
+                      onChange={(event) => patchWorkflowField('decisions.performanceBondDetails', event.target.value)}
+                      placeholder="金額或比例、繳納形式、有效期間及返還時點"
+                    />
+                  </label>
+                )}
+
+                {workflowFieldIsApplicable('contract.insuranceRequired') && (
+                  <label>
+                    保險需求 <span className="required-label">條件必填</span>
+                    <select
+                      value={String(workflowFieldValue('contract.insuranceRequired') ?? '')}
+                      onChange={(event) => patchWorkflowField('contract.insuranceRequired', event.target.value)}
+                    >
+                      <option value="">請依案件風險選擇</option>
+                      {workflowDefinitionById.get('contract.insuranceRequired')?.options?.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}｜{option.description}</option>
+                      ))}
+                    </select>
+                    <small className="field-help">活動、人員派遣、旅行安排或部分施工會影響適用險種。</small>
+                  </label>
+                )}
+
+                {workflowFieldIsApplicable('contract.insuranceTypes') && (
+                  <label>
+                    保險種類、保額與期間 <span className="required-label">條件必填</span>
+                    <textarea
+                      rows={4}
+                      value={String(workflowFieldValue('contract.insuranceTypes') ?? '')}
+                      onChange={(event) => patchWorkflowField('contract.insuranceTypes', event.target.value)}
+                      placeholder="例如：公共意外責任保險；每人、每事故及保險期間累計保額；自負額；保險期間；投保證明"
+                    />
+                  </label>
+                )}
+
+                {workflowFieldIsApplicable('contract.insuranceWaiverReason') && (
+                  <label>
+                    不要求保險的風險評估與理由 <span className="required-label">條件必填</span>
+                    <textarea
+                      rows={3}
+                      value={String(workflowFieldValue('contract.insuranceWaiverReason') ?? '')}
+                      onChange={(event) => patchWorkflowField('contract.insuranceWaiverReason', event.target.value)}
+                      placeholder="說明本案風險、既有保障或其他不要求廠商另行投保的理由"
+                    />
+                  </label>
+                )}
+
+                {workflowFieldIsApplicable('contract.ipRights') && (
+                  <label>
+                    智慧財產權與成果使用 <span className="required-label">條件必填</span>
+                    <textarea
+                      rows={4}
+                      value={String(workflowFieldValue('contract.ipRights') ?? '')}
+                      onChange={(event) => patchWorkflowField('contract.ipRights', event.target.value)}
+                      placeholder="說明著作權歸屬、機關使用／修改／再授權範圍、第三人素材與原始檔交付"
+                    />
+                  </label>
+                )}
+
+                {workflowFieldIsApplicable('contract.confidentiality') && (
+                  <label>
+                    保密、個資與資訊安全 <span className="required-label">條件必填</span>
+                    <textarea
+                      rows={4}
+                      value={String(workflowFieldValue('contract.confidentiality') ?? '')}
+                      onChange={(event) => patchWorkflowField('contract.confidentiality', event.target.value)}
+                      placeholder="資料範圍、存取權限、保存與刪除、事故通報、保密切結與稽核方式"
+                    />
+                  </label>
+                )}
+              </div>
+
+              <FieldReadinessPanel
+                title="採購與契約欄位檢核"
+                description="每個適用選項都要有正式值；修改後會回到待確認狀態。"
+                report={decisionReadiness}
+                definitions={decisionFieldDefinitions}
+              />
+              <div className="stage-actions">
+                <button onClick={confirmProcurementAndContractSettings}>確認本區設定</button>
+              </div>
+            </div>
+          )}
+
+          {isDocumentWorkflow && <div className="card security-card">
             <h2>4. 機敏資料控管</h2>
             <div className="form-grid">
               <label>案件安全等級<select value={current.securityLevel} onChange={(e) => patch('securityLevel', e.target.value as SecurityLevel)}>{Object.entries(securityNames).map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
@@ -875,8 +1382,9 @@ export default function App() {
                 </div>
               )}
             </div>
-          </div>
+          </div>}
 
+          {isDocumentWorkflow && <>
           <div className="card">
             <h2>5. 系統判斷的文件清單</h2>
             <div className="columns">
@@ -964,22 +1472,25 @@ export default function App() {
             {current.category === 'service' && (
               <button
                 className="package-primary"
-                disabled={!preflight.canPackage}
+                disabled={!canFormalPackage}
                 onClick={() => void exportCompletePackage()}
-                title={preflight.canPackage ? 'Preflight 已通過，可產生完整招標文件包' : `尚有 ${preflight.blockers.length} 項阻擋事項`}
+                title={canFormalPackage
+                  ? '欄位確認與跨文件檢核均已通過'
+                  : `欄位 ${formalReadiness.blockingIssues.length} 項、文件 ${preflight.blockers.length} 項阻擋`}
               >
                 一鍵下載完整招標文件包 ZIP
               </button>
             )}
             {current.category === 'service' && (
-              <p className={`package-readiness ${preflight.canPackage ? 'ready' : 'blocked'}`}>
-                {preflight.canPackage
+              <p className={`package-readiness ${canFormalPackage ? 'ready' : 'blocked'}`}>
+                {canFormalPackage
                   ? `整包輸出就緒｜${preflight.warnings.length} 項非阻擋提醒`
-                  : `整包輸出未就緒｜${preflight.blockers.length} 項阻擋、${preflight.warnings.length} 項提醒`}
+                  : `整包輸出未就緒｜欄位 ${formalReadiness.blockingIssues.length} 項、文件 ${preflight.blockers.length} 項阻擋，${preflight.warnings.length} 項提醒`}
               </p>
             )}
             {templateWriteStatus && <p className="template-write-status">{templateWriteStatus}</p>}
           </div>
+          </>}
         </section>
       </main>
     </div>
