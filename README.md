@@ -270,3 +270,12 @@ npm run dev
 ---
 
 Private MVP — 尚未開放一般使用者正式辦理採購案件。
+
+## 分支清理建議
+
+本倉庫目前保留約 20 個功能與修復分支（例如 `feature/*`、`fix/*`、`feat/*`），以及自動化分支 `automation/pcc-template-update`。為保持 `main` 歷史可追溯，建議採以下文件化流程處理，不直接在本分支刪除任何分支：
+
+1. 先確認各分支是否已合併進 `main`：`git branch --merged main` 列出可安全刪除的候選。
+2. 已合併且無後續用途的功能分支，可由維護者在 GitHub 上刪除（或 `git push origin --delete <branch>`）。
+3. 自動化分支 `automation/pcc-template-update` 與 CI 驗證分支請保留，除非對應 workflow 已下線。
+4. 刪除前建議先打 tag 或保留合併紀錄，避免遺失審查脈絡。
