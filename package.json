@@ -12,7 +12,7 @@
     "test:rules": "node --experimental-strip-types --test scripts/procurement-guidance.test.ts",
     "test:workflow": "node --experimental-strip-types --test scripts/case-workflow.test.ts",
     "test:pcc-promote": "node --test scripts/pcc-promote.test.mjs",
-    "test": "npm run test:gemini && npm run test:intake && npm run test:rules && npm run test:workflow && npm run test:pcc-promote",
+    "test": "npm run test:gemini && npm run test:intake && npm run test:rules && npm run test:workflow && npm run test:pcc-promote && npm run test:pcc-watcher",
     "preview": "vite preview",
     "pcc:watch": "node scripts/pcc-watcher.mjs",
     "pcc:assets": "node scripts/pcc-assets.mjs",
@@ -20,7 +20,8 @@
     "pcc:audit": "node scripts/pcc-registry-audit.mjs",
     "pcc:promote": "node scripts/pcc-promote.mjs",
     "template:anchors": "node scripts/template-anchor-audit.mjs",
-    "template:smoke": "node scripts/template-writer-smoke.mjs"
+    "template:smoke": "node scripts/template-writer-smoke.mjs",
+    "test:pcc-watcher": "node --test scripts/pcc-watcher.test.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "6.1.0",
